@@ -53,7 +53,6 @@ data_dir = '/shared/mai_datasets/ngpt_owt'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
-data_encoding = "bpe" # "bpe", "char", "bit"
 # model
 n_layer = 12
 n_head = 12
@@ -125,37 +124,17 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-# reencoding
-bpe_enc = tiktoken.get_encoding('gpt2')
-def reencode(seq):
-    if data_encoding == "bpe":
-        return seq
-    seq_text = bpe_enc.decode(seq)
-    char_enc_seq = [ord(c) for c in seq_text if ord(c) < 256]
-    if len(char_enc_seq) < len(seq):
-        char_enc_seq.extend([10] * (len(seq) - len(char_enc_seq))) # pad with newlines
-    else:
-        char_enc_seq = char_enc_seq[:len(seq)]
-    if data_encoding == "char":
-        return np.array(char_enc_seq, dtype=np.uint8)
-    binary_enc_seq = [int(b) for n in char_enc_seq[:len(seq)//8+1] for b in format(n, '08b')][:len(seq)]
-    if data_encoding == "bit":
-        return np.array(binary_enc_seq, dtype=np.bool_)
-    raise ValueError(f"Invalid data encoding: {data_encoding}")
-
+# create datapoint
+def make_datapoint():
+    x = np.random.randint(0, 2, (block_size,))
+    y = np.cumsum(x) % 2  # Cumulative XOR using modulo 2
+    return x, y
 
 # poor man's data loader
 def get_batch(split):
-    # We recreate np.memmap every batch to avoid a memory leak, as per
-    # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
-    if split == 'train':
-        data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
-    else:
-        data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
-    ix = torch.randint(len(data) - (block_size+1), (batch_size,))
-    src = np.stack([reencode(data[i:i+block_size+1]) for i in ix]).astype(np.int64)
-    x = torch.from_numpy(src[:, :-1])
-    y = torch.from_numpy(src[:,1:  ])
+    x, y = zip(*[make_datapoint() for _ in range(batch_size)])
+    x = torch.from_numpy(np.array(x, dtype=np.int64))
+    y = torch.from_numpy(np.array(y, dtype=np.int64))
     if device_type == 'cuda':
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
@@ -176,12 +155,7 @@ if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
     # determine the vocab size we'll use for from-scratch training
-    if data_encoding == "bpe":
-        model_args['vocab_size'] = 50304
-    elif data_encoding == "char":
-        model_args['vocab_size'] = 256
-    elif data_encoding == "bit":
-        model_args['vocab_size'] = 2
+    model_args['vocab_size'] = 2
     gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
 elif init_from == 'resume':

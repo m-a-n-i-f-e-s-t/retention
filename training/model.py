@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from power_attention import power_full
+from power_attention import power_full, attention
 from torch.nn import functional as F
 
 class LayerNorm(nn.Module):
@@ -41,7 +41,7 @@ class CausalSelfAttention(nn.Module):
         self.head_size = config.head_size
         self.qhead_ratio = config.qhead_ratio
         self.log_space = config.log_space
-        self.gating = self.attention_kernel == 'power' and not config.disable_gating
+        self.gating = self.attention_kernel != 'sdpa' and not config.disable_gating
         # key, query, value projections for all heads, but in a batch
         self.qkv_size = (config.qhead_ratio + 2) * self.n_head * self.head_size
         self.gating_size = config.n_head if self.gating else 0
@@ -103,6 +103,17 @@ class CausalSelfAttention(nn.Module):
                 deterministic=False,
                 normal_space=not self.log_space)
             y = self.ln(y)
+        elif self.attention_kernel == 'maiflash':
+            if self.gating: log_g = torch.cumsum(log_g, dim=1)
+            y_unnormalized, norm, _ = attention(q.contiguous(), k.contiguous(), v.contiguous(), log_g,
+                                scale=1.0 / d**0.5,
+                                deg=1,
+                                eps=1e-7,
+                                deterministic=False,
+                                normalize_output=False,
+                                flash_equivalent=True,
+                                normal_space=not self.log_space)
+            y = (y_unnormalized / norm.unsqueeze(-1).contiguous()).to(dtype=v.dtype)
         else:
             msg = f'Unknown attention kernel: {self.attention_kernel}'
             raise NotImplementedError(msg)
@@ -203,7 +214,7 @@ class GPT(nn.Module):
         # "UserWarning: functional_call was passed multiple values for tied weights.
         # This behavior is deprecated and will be an error in future versions"
         # not 100% sure what this is, so far seems to be harmless. TODO investigate
-        self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
+        # self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
 
         # init all weights
         self.apply(self._init_weights)
@@ -211,6 +222,8 @@ class GPT(nn.Module):
         for pn, p in self.named_parameters():
             if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
+        # Initial probabilities are uniform
+        torch.nn.init.zeros_(self.lm_head.weight)
 
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))	
