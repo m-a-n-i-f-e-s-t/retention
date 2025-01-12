@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 from power_attention import power_full, attention
 from torch.nn import functional as F
+from flash_attn import flash_attn_func
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -41,6 +42,7 @@ class CausalSelfAttention(nn.Module):
         self.head_size = config.head_size
         self.qhead_ratio = config.qhead_ratio
         self.log_space = config.log_space
+        self.window_size = config.window_size
         self.gating = self.attention_kernel != 'sdpa' and not config.disable_gating
         # key, query, value projections for all heads, but in a batch
         self.qkv_size = (config.qhead_ratio + 2) * self.n_head * self.head_size
@@ -94,6 +96,14 @@ class CausalSelfAttention(nn.Module):
                                                                  scale=1.0 / d**0.5,
                                                                  enable_gqa=self.qhead_ratio > 1)
             y = y.transpose(1, 2) # (B, T, nh, hs)
+        elif self.attention_kernel == 'flash':
+            y = flash_attn_func(q, k, v,
+                                dropout_p=self.dropout if self.training else 0,
+                                softmax_scale=1.0 / d**0.5,
+                                causal=True,
+                                alibi_slopes=None,
+                                deterministic=False,
+                                window_size=(self.window_size-1, 0) if self.window_size is not None else (-1, -1))
         elif self.attention_kernel == 'power':
             y = power_full(q.contiguous(), k.contiguous(), v.contiguous(), log_g,
                 deg=self.degree,
@@ -194,6 +204,7 @@ class GPTConfig:
     head_size: int = 64
     qhead_ratio: int = 1
     log_space: bool = False
+    window_size: int = None
 
 class GPT(nn.Module):
 

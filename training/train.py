@@ -85,6 +85,7 @@ log_space = True
 degree = 1
 head_size = 64 # to separate from n_embd
 qhead_ratio = 1
+window_size = None
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -124,30 +125,27 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
+state_n = 64
+permutation = np.stack([np.random.permutation(state_n), np.random.permutation(state_n)], axis=1)
+
 # create datapoint
 def make_datapoint(size):
-    padded_size = size + (size % 2)
-    sequence = np.empty(padded_size, dtype=np.int32)
-    x_values = np.random.randint(0, 2, size=padded_size//2)
-    state = 39
-    for i, x in enumerate(x_values):
-        if x: state *= 3
-        if state % 2 == 0:
-            state = state // 2
-        else:
-            state = (3 * state + 1) // 2
-        y = state % 2
-        sequence[2*i] = x
-        sequence[2*i+1] = y
-        if state == 1: print("reached 1")
-    return sequence[:size]
+    state = 0 
+    # state = np.random.randint(0, state_n)
+    output = np.empty(size, dtype=np.int32)
+    output[0] = 0
+    for i in range(1, size, 2):
+        which = np.random.randint(0, 2)
+        output[i] = which
+        state = permutation[state, which]
+        output[i+1] = state % 2
+    return output
 
 # poor man's data loader
 def get_batch(split):
-    offset = 0
-    src = np.stack([make_datapoint(offset+block_size+1) for _ in range(batch_size)]).astype(np.int64)
-    x = torch.from_numpy(src[:,offset+0:-1])
-    y = torch.from_numpy(src[:,offset+1:  ])
+    src = np.stack([make_datapoint(block_size+1) for _ in range(batch_size)]).astype(np.int64)
+    x = torch.from_numpy(src[:,0:-1])
+    y = torch.from_numpy(src[:,1:  ])
     if device_type == 'cuda':
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
@@ -163,7 +161,7 @@ best_val_loss = 1e9
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
                   bias=bias, vocab_size=None, dropout=dropout,
                   attention_kernel=attention_kernel, disable_gating=disable_gating, head_size=head_size,
-                  chunk_size=chunk_size, degree=degree, log_space=log_space, qhead_ratio=qhead_ratio) # start with model_args from command line
+                  chunk_size=chunk_size, degree=degree, log_space=log_space, qhead_ratio=qhead_ratio, window_size=window_size) # start with model_args from command line
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
