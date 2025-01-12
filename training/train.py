@@ -125,16 +125,29 @@ ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torc
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
 # create datapoint
-def make_datapoint():
-    x = np.random.randint(0, 2, (block_size,))
-    y = np.cumsum(x) % 2  # Cumulative XOR using modulo 2
-    return x, y
+def make_datapoint(size):
+    padded_size = size + (size % 2)
+    sequence = np.empty(padded_size, dtype=np.int32)
+    x_values = np.random.randint(0, 2, size=padded_size//2)
+    state = 39
+    for i, x in enumerate(x_values):
+        if x: state *= 3
+        if state % 2 == 0:
+            state = state // 2
+        else:
+            state = (3 * state + 1) // 2
+        y = state % 2
+        sequence[2*i] = x
+        sequence[2*i+1] = y
+        if state == 1: print("reached 1")
+    return sequence[:size]
 
 # poor man's data loader
 def get_batch(split):
-    x, y = zip(*[make_datapoint() for _ in range(batch_size)])
-    x = torch.from_numpy(np.array(x, dtype=np.int64))
-    y = torch.from_numpy(np.array(y, dtype=np.int64))
+    offset = 0
+    src = np.stack([make_datapoint(offset+block_size+1) for _ in range(batch_size)]).astype(np.int64)
+    x = torch.from_numpy(src[:,offset+0:-1])
+    y = torch.from_numpy(src[:,offset+1:  ])
     if device_type == 'cuda':
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
