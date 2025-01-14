@@ -283,6 +283,14 @@ def _log_to_server():
             print(f"WARNING: Failed to send log for {data['entry_name']} to server: {e}")
         SERVER_QUEUE.task_done()
 
+def wait_for_completion():
+    """Wait for all queued logs to be written to disk and sent to server."""
+    if LOCAL_ROOT:
+        LOCAL_QUEUE.join()  # Wait for all local file writes to complete
+    if SERVER_URL:
+        SERVER_QUEUE.join()  # Wait for all server requests to complete
+
+
 if __name__ == "__main__":
     init("example_experiment/run1")
     

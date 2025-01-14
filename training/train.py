@@ -19,9 +19,7 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 import os
 import time
 import math
-import pickle
 from contextlib import nullcontext
-import tiktoken
 
 import numpy as np
 import torch
@@ -50,13 +48,13 @@ wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
 data_dir = '/shared/mai_datasets/ngpt_owt'
-gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
-batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
+gradient_accumulation_steps = 1
+batch_size = 128
 block_size = 1024
 # model
-n_layer = 12
-n_head = 12
-n_embd = 768
+n_layer = 4
+n_head = 4
+n_embd = 128
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
 # adamw optimizer
@@ -67,7 +65,7 @@ beta1 = 0.9
 beta2 = 0.95
 grad_clip = 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
-decay_lr = True # whether to decay the learning rate
+decay_lr = False # whether to decay the learning rate
 warmup_iters = 2000 # how many steps to warm up for
 lr_decay_iters = 600000 # should be ~= max_iters per Chinchilla
 min_lr = 6e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
@@ -79,6 +77,7 @@ dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported
 compile = True # use PyTorch 2.0 to compile the model to be faster
 # manifest ai specific
 attention_kernel = 'sdpa' # 'sdpa', 'power'
+state_n = 64
 disable_gating = False
 chunk_size = None
 log_space = True
@@ -125,20 +124,13 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-state_n = 64
-permutation = np.stack([np.random.permutation(state_n), np.random.permutation(state_n)], axis=1)
+eps = .05
+permutation = np.random.RandomState(1234).permutation(state_n+1)
 
 # create datapoint
 def make_datapoint(size):
-    state = 0 
-    # state = np.random.randint(0, state_n)
-    output = np.empty(size, dtype=np.int32)
-    output[0] = 0
-    for i in range(1, size, 2):
-        which = np.random.randint(0, 2)
-        output[i] = which
-        state = permutation[state, which]
-        output[i+1] = state % 2
+    output = np.roll(permutation, np.random.randint(0, state_n))[:size] % 2
+    output = np.where(np.random.rand(size) < eps, 1 - output, output)
     return output
 
 # poor man's data loader
@@ -222,12 +214,15 @@ def estimate_loss():
     model.eval()
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
+        tail_losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = get_batch(split)
             with ctx:
-                logits, loss = model(X, Y)
+                logits, loss, tail_loss = model(X, Y)
             losses[k] = loss.item()
+            tail_losses[k] = tail_loss.item()
         out[f'{split}/avg'] = losses.mean()
+        out[f'{split}/tail'] = tail_losses.mean()
     model.train()
     return out
 
@@ -278,12 +273,14 @@ while True:
         if torch.cuda.is_available(): torch.cuda.synchronize() # sync for timing
         total_eval_time += time.time() - eval_start_time
         eval_count += 1
-        print(f"[{run_name}] step {iter_num} (eval {eval_count}): train loss {losses['train/avg']:.4f}, val loss {losses['val/avg']:.4f}")
+        print(f"[{run_name}] step {iter_num} (eval {eval_count}): avg loss {losses['train/avg']:.4f}, val {losses['val/avg']:.4f} | tail loss train {losses['train/tail']:.4f}, val {losses['val/tail']:.4f}")
         if not disable_logging:
             logger.log("eval", {
                 "iter": iter_num,
                 "train.loss.avg": losses['train/avg'].item(),
                 "heldout.loss.avg": losses['val/avg'].item(),
+                "train.loss.tail": losses['train/tail'].item(),
+                "heldout.loss.tail": losses['val/tail'].item(),
                 "lr": lr,
                 "train_hours": (time.time() - train_start_time - total_eval_time) / 3600,  # Convert seconds to hours
                 "total_hours": (time.time() - train_start_time) / 3600,  # Convert seconds to hours
@@ -293,6 +290,8 @@ while True:
                 "iter": iter_num,
                 "train/avg_loss": losses['train/avg'],
                 "val/avg_loss": losses['val/avg'],
+                "train/tail_loss": losses['train/tail'],
+                "val/tail_loss": losses['val/tail'],
                 "lr": lr,
             })
         if losses['val/avg'] < best_val_loss or always_save_checkpoint:
@@ -326,7 +325,7 @@ while True:
             # looking at the source of that context manager, it just toggles this variable
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         with ctx:
-            logits, loss = model(X, Y)
+            logits, loss, _ = model(X, Y)
             # scale to account for gradient accumulation
             loss = loss / gradient_accumulation_steps
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
@@ -365,5 +364,9 @@ while True:
     if iter_num > max_iters:
         break
 
+
 if ddp:
     destroy_process_group()
+
+if not disable_logging:
+    logger.wait_for_completion()
