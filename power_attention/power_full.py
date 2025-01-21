@@ -98,8 +98,7 @@ Args:
         * deg=2: 49% state size reduction, slightly worse than baseline
         * deg=4: 96% reduction, outperforms baseline
         * deg=6: 99.8% reduction, best performance but large state
-    stabilizer: Optional stabilization factor for numerical stability.
-        Defaults to expanded_dim for fp16 computations.
+    scale: Scale factor for attention weights. Defaults to 1.0.
     chunk_size: Size of chunks for processing long sequences.
         If None, uses O(n²) attention formulation.
         If set, uses O(n) RNN formulation with chunked computation.

@@ -40,13 +40,6 @@ def attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor,
             When provided, applies multiplicative gating to attention weights.
         deg: Power attention degree. Must be even. Higher values make attention more "focused".
         scale: Optional scale factor for Q·K^T. Usually 1/sqrt(head_dim).
-        eps: Small constant for numerical stability.
-        deterministic: Whether to use deterministic gradient accumulation.
-            May slow things down with small batches but ensures reproducibility.
-        normalize_output: Whether to normalize output by attention weight sums.
-        flash_equivalent: Whether to use flash-attention equivalent implementation.
-        normal_space: Whether to compute in normal space vs log space.
-            Normal space is faster but potentially less numerically stable.
 
     Returns:
         Tuple containing:
