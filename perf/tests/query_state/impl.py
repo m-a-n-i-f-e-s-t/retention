@@ -28,7 +28,7 @@ param_ranges_impl = {
     'dtype': [torch.bfloat16],
     'fused': [True, False],
     'device': ['cuda'],
-    'stabilizer': [1.0]
+    'scale': [1.0]
 }
 IMPL_TEST_CASES = [
     dict(zip(param_ranges_impl.keys(), values))
@@ -39,7 +39,7 @@ def id_fn(kw):
            f"dtype_{kw['dtype']}-" \
            f"fused_{kw['fused']}-" \
            f"device_{kw['device']}-" \
-           f"stabilizer_{kw['stabilizer']}"
+           f"scale_{kw['scale']}"
 
 @pytest.mark.parametrize("kw", IMPL_TEST_CASES, ids=id_fn)
 def test_query_state_create_inputs(kw):
@@ -122,7 +122,7 @@ param_ranges_ref = {
     'dtype': [torch.float16, torch.bfloat16],
     'fused': [True, False],
     'device': ['cuda'],
-    'stabilizer': [1.0]
+    'scale': [1.0]
 }
 
 REF_TEST_CASES = [

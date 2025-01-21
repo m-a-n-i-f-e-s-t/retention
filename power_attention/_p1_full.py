@@ -101,7 +101,7 @@ def p1_full(Q, K, V, log_G=None, initial_state=None,
     if qhead_ratio > 1:
         S = S.repeat_interleave(qhead_ratio, dim=2)
 
-    # correction = (stabilizer / rowmax)
+    # correction = (scale / rowmax)
     # qs_Y = _query_state((Q * correction).to(dtype), S)
     Y = _query_state(Q, S, attn_Y, rowmax, 1, scale)
     return Y.reshape(b, t, hq, d)

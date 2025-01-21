@@ -25,7 +25,7 @@ param_ranges_bwd = {
     'dtype': [torch.bfloat16],
     'device': ['cuda'],
     'fused': [True, False],
-    'stabilizer': [1.0]
+    'scale': [1.0]
 }
 BWD_TEST_CASES = [
     dict(zip(param_ranges_bwd.keys(), values))
@@ -36,7 +36,7 @@ def id_fn(kw):
            f"dtype_{kw['dtype']}-" \
            f"fused_{kw['fused']}-" \
            f"device_{kw['device']}-" \
-           f"stabilizer_{kw['stabilizer']}"
+           f"scale_{kw['scale']}"
 
 
 @pytest.mark.parametrize("kw", BWD_TEST_CASES, ids=id_fn)
