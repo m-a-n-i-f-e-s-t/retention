@@ -5,14 +5,11 @@
 import torch
 import torch.nn.functional as F
 from enum import Enum
-from functools import partial
 from torch.utils._pytree import tree_map
 from power_attention._attention import attention, attention_reference
 from power_attention._update_state import update_state, update_state_reference
 from power_attention._discumsum import discumsum, discumsum_reference
 from power_attention._query_state import query_state, query_state_reference
-from power_attention._p1_full import p1_full, _update_state as update_state_matmul, _query_state as query_state_matmul
-from power_attention._config import normal_space
 from power_attention._utils import compute_expanded_dim
 import math
 
@@ -35,6 +32,21 @@ class AttentionImpl(Enum):
     CUTLASS = 0
     REFERENCE = 1
     TRITON = 2
+
+def update_state_matmul(K, V, *args):
+    # K: [b,n,c,h,D]
+    # V: [b,n,c,h,d]
+    # Output: [b,n,h,D,d]
+    return torch.matmul(K.permute(0, 1, 3, 4, 2), V.transpose(2, 3))  # [b,n,h,D,d]
+
+def query_state_matmul(Q, S, attn_Y, rowmax, deg, scale, zero_initial_state):
+    # Q: [b,n,c,h,D]
+    # S: [b,n,h,D,d]
+    # Output: [b,n,c,h,d]
+    correction = torch.exp(-rowmax)
+    qs_Y = torch.matmul((Q * correction.unsqueeze(-1)).to(Q.dtype).transpose(2, 3), S).transpose(2, 3)  # [b,n,c,h,d]
+    return attn_Y + qs_Y
+
 
 IMPL_MAP = {
     UpdateStateImpl.CUTLASS: update_state,
