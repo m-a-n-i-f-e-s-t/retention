@@ -28,7 +28,7 @@ $(VENV_DIR)/.deps_venv: # Ensure venv is created and make venv is idempotent
 	@echo "Creating virtual environment using $(PYTHON) ($(shell $(PYTHON) --version 2>&1))"
 	$(PYTHON) -m venv $(VENV_DIR)
 	$(PIP) install --upgrade pip
-	tourch $@
+	touch $@
 $(VENV_DIR)/.deps_test: $(VENV_DIR)/.deps_venv
 	@$(call get_deps,test) | $(PIP) install -r /dev/stdin && touch $@
 

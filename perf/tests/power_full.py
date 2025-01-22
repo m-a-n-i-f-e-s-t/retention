@@ -211,7 +211,6 @@ def test_power_full_kernel_matches_reference(kw, compile):
 @pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
 @pytest.mark.parametrize("compile", [False, True])
 def test_power_full_kernel_grad_matches_reference(kw, compile):
-    # if kw['deg'] == 1 
     gold_inputs = create_inputs(requires_grad=True, **(kw | {'dtype': torch.float32}))
     test_inputs = create_inputs(requires_grad=True, **kw)
     check_fn_backwards_match(
