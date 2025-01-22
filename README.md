@@ -119,7 +119,8 @@ pytest perf/tests
 Run benchmarks:
 
 ```bash
-python3 -m perf.create_report
+python3 -m perf.create_report # will only run on clean commits
+python3 -m perf.plot_reports
 ```
 
 ### Documentation
@@ -199,7 +200,7 @@ We welcome contributions! Here's how you can help:
 1. Update documentation for any new features
 2. Add or update tests as needed
 3. Ensure all tests pass: `python3 -m pytest perf/tests`
-4. Run benchmarks if performance-critical code was changed: `python3 -m perf.create_report`
+4. Run benchmarks if performance-critical code was changed: `python3 -m perf.create_report && python3 -m perf.plot_reports`
 5. Create a Pull Request with a clear description of changes
 6. Wait for review and address any feedback
 

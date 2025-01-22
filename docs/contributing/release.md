@@ -32,20 +32,15 @@ make check-version
 
 3. Run test suite:
 ```bash
-make test
+pytest
 ```
 
-4. Build the package:
-```bash
-make build
-```
-
-5. Test the release on TestPyPI:
+4. Build and release on TestPyPI:
 ```bash
 make release-test
 ```
 
-6. If successful, release to PyPI:
+5. If successful, build and release to PyPI:
 ```bash
 make release
 ```
@@ -63,7 +58,7 @@ Before releasing:
 - [ ] All tests pass
 - [ ] Documentation is up to date
 - [ ] CHANGELOG.md is updated
-- [ ] Version is bumped
+- [ ] Version (pyproject.toml) is bumped
 - [ ] Release notes are prepared
 - [ ] TestPyPI release works
 - [ ] Git tag is created

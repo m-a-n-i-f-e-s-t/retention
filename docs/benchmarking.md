@@ -58,12 +58,8 @@ Each benchmark report contains detailed measurements with their configurations. 
 
 ## Visualizing Results
 
-The benchmarking suite includes a plotting tool to visualize results interactively:
+The benchmarking suite includes a plotting tool to visualize results across time interactively:
 
 ```bash
-# Create interactive HTML plots from a benchmark report
-python -m perf.plot results.yaml
-
-# Specify custom output file (default: benchmark_results.html)
-python -m perf.plot results.yaml -o my_plots.html
+python -m perf.plot_reports -o my_plots.html
 ```

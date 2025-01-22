@@ -13,7 +13,7 @@ ifeq ($(PYTHON),)
     $(error Python 3.11 or higher is required. Please install Python 3.11+)
 endif
 
-.PHONY: clean check-version check-test-version release release-test help
+.PHONY: clean check-version check-test-version release release-test help plot-regressions
 
 # Clean and check
 clean:
@@ -45,6 +45,11 @@ release-test: clean check-test-version
 	python -m twine upload --repository testpypi dist/*
 	@echo "Test release $(VERSION) completed!"
 
+# Visualization
+plot-regressions:
+	@echo "Generating regression visualization..."
+	$(PYTHON) perf/plot_regressions.py
+
 # Help
 help:
 	@echo "Available commands:"
@@ -53,4 +58,5 @@ help:
 	@echo "  make release-test  - Release to TestPyPI"
 	@echo "  make check-version - Check version against PyPI"
 	@echo "  make check-test-version - Check version against TestPyPI"
+	@echo "  make plot-regressions  - Generate interactive regression visualization"
 	@echo "Current version: $(VERSION)" 
