@@ -3,6 +3,10 @@ from collections.abc import Iterable
 import torch
 from perf._utils import clone_or_none, prune_non_tensors, tensors_to_ones_like
 
+x = torch.empty(int(40 * (1024 ** 2)), dtype=torch.int8, device='cuda')
+
+def flush_cache():
+    x.zero_()
 
 def get_compiled_versions(fn, inputs, warmup=3):
     """Takes a function and args and returns compiled versions for fwd, bwd, and fwd+bwd passes.
@@ -54,21 +58,28 @@ def check_tensors_unchanged(tensor1, tensor2, prefix=''):
             check_tensors_unchanged(t, o, prefix)
 
 
-def wrap_with_timer(fn, n=10):
+def wrap_with_timer(fn, n=10, warmup=3):
     """Takes a function and returns a function that calls it n times and returns the total time."""
     def timed_fn(*args, **kwargs):
+        for _ in range(warmup):
+            fn(*args, **kwargs)
+
         torch.cuda.synchronize()
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
-        start_event.record()
-        for _ in range(n):
+        start_events = [torch.cuda.Event(enable_timing=True) for _ in range(n)]
+        end_events = [torch.cuda.Event(enable_timing=True) for _ in range(n)]
+        for i in range(n):
+            flush_cache()
+            torch.cuda._sleep(1_000_000)
+            start_events[i].record()
             out = fn(*args, **kwargs)
-        end_event.record()
-        end_event.synchronize()
-        return out, start_event.elapsed_time(end_event)
+            end_events[i].record()
+        torch.cuda.synchronize()
+        times = [s.elapsed_time(e) for s, e in zip(start_events, end_events)]
+        total_time = sum(times)
+        return out, total_time
     return timed_fn
 
-def estimate_runtime(fn, *args, num1=10, num2=30, **kwargs):
+def estimate_runtime(fn, *args, num1=10, num2=50, **kwargs):
     """Takes a function and returns a an estimate of time per iteration."""
     timed_fn_1 = wrap_with_timer(fn, num1)
     timed_fn_2 = wrap_with_timer(fn, num2)
@@ -130,3 +141,10 @@ def benchmark_speed(direction, fn, create_inputs, create_inputs_kwargs):
     else:
         raise ValueError(f"Invalid direction: {direction}")
     return time
+
+def report_fwd_bwd(fn, *args, **kwargs):
+    fwd_fn, bwd_fn, fwdbwd_fn = get_compiled_versions(fn, *args, **kwargs)
+    fwd_time = estimate_runtime(fwd_fn)
+    bwd_time = estimate_runtime(bwd_fn)
+    fwdbwd_time = estimate_runtime(fwdbwd_fn)
+    print(f"fwd_time: {fwd_time:.2f}ms, bwd_time: {bwd_time:.2f}ms, fwdbwd_time: {fwdbwd_time:.2f}ms")
