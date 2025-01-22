@@ -15,7 +15,7 @@ from power_attention._config import eps
 def query_state_fwd(Q : torch.Tensor, S : torch.Tensor,
                     Y : Optional[torch.Tensor],
                     rowmax : Optional[torch.Tensor], deg : int,
-                    stabilizer : float, zero_initial_state : bool) -> torch.Tensor:
+                    scale : float, zero_initial_state : bool) -> torch.Tensor:
     """Compute query state forward pass.
     
     Input shapes:
@@ -24,9 +24,8 @@ def query_state_fwd(Q : torch.Tensor, S : torch.Tensor,
         Y: Optional[batch, num_chunks, chunk_size, head, dim] - Optional output tensor
         rowmax: Optional[batch, num_chunks, chunk_size, head] - Optional rowmax tensor
         deg: int - Power attention degree
-        stabilizer: float - Stabilization factor
+        scale: float - Scaling factor
         zero_initial_state: bool - Whether the initial state is zero
-        eps: float - Small constant for numerical stability
         
     Output shapes:
         O: [batch, num_chunks, chunk_size, head, dim] - Output tensor
@@ -40,18 +39,18 @@ def query_state_fwd(Q : torch.Tensor, S : torch.Tensor,
     # TODO(jbuckman): Figure out how to make this traceable despite buffer reuse, and remove clone()
     Y = Y.clone() if Y is not None else None
     O, _ = compute_query_states_cuda(Q, S, Y, rowmax,
-                                        None, deg, stabilizer, zero_initial_state, eps,
+                                        None, deg, scale, zero_initial_state, eps,
                                         False, True)
     return O
 
 # Fake implementation for tracing and testing
 @query_state_fwd.register_fake
-def query_state_fwd_fake(Q, S, Y, rowmax, deg, stabilizer, zero_initial_state):
+def query_state_fwd_fake(Q, S, Y, rowmax, deg, scale, zero_initial_state):
     b, n, c, h, d = Q.shape
     return torch.empty(b, n, c, h, d, device=Q.device, dtype=Q.dtype)
 
 # Useful function to create sample inputs
-def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, device='cuda', seed=42, zero_initial_state=False, stabilizer=None):
+def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, device='cuda', seed=42, zero_initial_state=False, scale=None):
     torch.manual_seed(seed)
     deg = 2
     D = compute_expanded_dim(d, deg)
@@ -71,7 +70,7 @@ def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, 
         Y=Y, 
         rowmax=rowmax, 
         deg=deg, 
-        stabilizer=stabilizer, 
+        scale=scale, 
         zero_initial_state=zero_initial_state, 
     )
 
@@ -80,9 +79,9 @@ if __name__ == '__main__':
     # Hyperparameters
     b, n, c, h, d = (2, 4, 128, 8, 32)
     dtype = torch.float16
-    stabilizer = 1.0
+    scale = 1.0
     # Create inputs
-    inputs = create_inputs(b, n, c, h, d, dtype, 'cuda', stabilizer=stabilizer)
+    inputs = create_inputs(b, n, c, h, d, dtype, 'cuda', scale=scale)
     # Run function
     with torch.no_grad():
         O = query_state_fwd(**inputs)

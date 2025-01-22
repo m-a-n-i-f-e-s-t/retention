@@ -20,7 +20,6 @@ qhead_ratio = 1 # query heads to key/value heads for multi-query attention
 dtype = torch.bfloat16 # data type for attention tensors
 device = 'cuda' # device to create tensors on
 gating = True
-log_space = False
 
 # Create test inputs
 
@@ -34,18 +33,16 @@ else:
     log_G = None
 
 initial_state = None
-stabilizer = 1./d**0.5
-ε = 1e-5
+scale = 1./d**0.5
 normal_space = not log_space
 
 # Run power attention
 output = power_full(
     Q=Q, K=K, V=V, log_G=log_G, 
     initial_state=initial_state,
-    deg=2, stabilizer=stabilizer, ε=ε,
-    chunk_size=128,
-    normal_space=normal_space,
-    deterministic=True
+    deg=2,
+    scale=scale,
+    chunk_size=128
 )
 
 print("Ran power attention, output shape:", output.shape)
@@ -107,10 +104,8 @@ class CausalSelfAttention(nn.Module):
         # apply power attention
         y = power_full(q, k, v, log_g,
                       deg=self.degree,
-                      stabilizer=1.0 / d**0.5,
-                      chunk_size=self.chunk_size,
-                      ε=1e-7,
-                      normal_space=not self.log_space)
+                      scale=1.0 / d**0.5,
+                      chunk_size=self.chunk_size)
 
         # output projection
         y = y.contiguous().view(B, T, hq * d)

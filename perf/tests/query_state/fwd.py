@@ -25,14 +25,14 @@ param_ranges_fwd = {
     'dtype': [torch.float16, torch.bfloat16],
     'device': ['cuda'], 
     'fused': [True, False],
-    'stabilizer': [1.0, 100.0]
+    'scale': [1.0, 100.0]
 }
 def id_fn(kw):
     return f"shape_{kw['b']}_{kw['n']}_{kw['c']}_{kw['h']}_{kw['d']}-" \
            f"dtype_{kw['dtype']}-" \
            f"fused_{kw['fused']}-" \
            f"device_{kw['device']}-" \
-           f"stabilizer_{kw['stabilizer']}"
+           f"scale_{kw['scale']}"
 FWD_TEST_CASES = [
     dict(zip(param_ranges_fwd.keys(), values))
     for values in product(*param_ranges_fwd.values())

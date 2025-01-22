@@ -1,4 +1,5 @@
 # Power Attention
+[![Build](https://github.com/m-a-n-i-f-e-s-t/power-attention/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/m-a-n-i-f-e-s-t/power-attention/actions/workflows/build-and-test.yml)
 
 A PyTorch extension implementing symmetric power transformers - a variant of linear transformers that achieves transformer-level performance while scaling linearly with sequence length. This package provides efficient CUDA kernels that make it possible to process much longer sequences compared to standard quadratic attention.
 
@@ -105,12 +106,6 @@ pip install -e .
 
 # Install development dependencies
 pip install -e .[dev]
-
-# Install benchmark dependencies (optional)
-pip install -e .[benchmark]
-
-# Install training dependencies (optional)
-pip install -e .[train]
 ```
 
 ### Testing & Benchmarking
@@ -118,13 +113,21 @@ pip install -e .[train]
 Run correctness tests:
 
 ```bash
-pytest
+pytest perf/tests
 ```
 
 Run benchmarks:
 
 ```bash
-pytest perf/benchmarks
+python3 -m perf.create_report
+```
+
+### Documentation
+
+To view the documentation locally, run:
+
+```bash
+.venv/bin/mkdocs serve -a 0.0.0.0:8000
 ```
 
 ### Training Example
@@ -139,7 +142,6 @@ python train.py \
   --degree=2 \
   --chunk_size=128 \
   --disable_gating=False \
-  --log_space=True \
   --out_dir=out/my_model
 
 # Multi-GPU training with DDP (example with 4 GPUs)
@@ -149,7 +151,6 @@ torchrun --standalone --nproc_per_node=4 train.py \
   --degree=2 \
   --chunk_size=128 \
   --disable_gating=False \
-  --log_space=True \
   --out_dir=out/my_model
 ```
 
@@ -158,7 +159,6 @@ Key training parameters:
 - `degree`: Power attention degree (default: 1)
 - `chunk_size`: Size of chunks for processing long sequences (default: None)
 - `disable_gating`: Set to true to disable gating mechanism (default: False)
-- `log_space`: Whether to use log space computations (default: True)
 - `batch_size`: Batch size per GPU (default: 12)
 - `block_size`: Sequence length (default: 1024)
 - `out_dir`: Output directory for checkpoints and logs (default: 'out')

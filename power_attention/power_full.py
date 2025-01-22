@@ -162,7 +162,7 @@ class PowerFullFactory:
                 log_G = log_G.to(torch.float32)
 
             if not scale:
-                scale = 1.0
+                scale = 1.0 / d**0.5
 
             # Quick return for simple quadratic attention
             if t <= c:
@@ -235,13 +235,12 @@ class PowerFullFactory:
             out = Y.contiguous().view(b, t, hq, d).to(dtype)
             return out
 
+        _power_full.__doc__ = POWER_FULL_DOC
         return _power_full
 
 power_full_reference = PowerFullFactory.make_power_full(UpdateStateImpl.REFERENCE, QueryStateImpl.REFERENCE, DiscumsumImpl.REFERENCE, AttentionImpl.REFERENCE)
-power_full_reference.__doc__ = POWER_FULL_DOC
 
 power_full = PowerFullFactory.make_power_full(UpdateStateImpl.CUTLASS, QueryStateImpl.CUTLASS, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
-power_full.__doc__ = POWER_FULL_DOC
 
 ## Useful function to create sample inputs
 def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, device='cuda', gating=False,

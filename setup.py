@@ -286,7 +286,9 @@ dev_requires = [
     'pyyaml',
     'bokeh',
     'matplotlib',
-    'hf-doc-builder',
+    'pymdown-extensions',
+    'mkdocs',
+    'mkdocstrings-python',
 ]
 
 setup(

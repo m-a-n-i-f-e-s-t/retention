@@ -27,13 +27,24 @@ jobs:
     - name: Run tests
       run: |
         source .venv/bin/activate
-        pytest perf/tests/
+        pytest perf/tests/ --junit-xml=test-results.xml
 
-    - name: Check benchmark results exist
+    - name: Surface failing tests
+      uses: pmeier/pytest-results-action@main
+      with:
+        path: test-results.xml
+        summary: true
+        display-options: fEX
+        fail-on-empty: true
+        title: Test results
+
+    - name: Sanity-run benchmarks
       run: |
-        SHA=$(git rev-parse HEAD)
-        if ! ls reports/*${SHA}*.yaml 1> /dev/null 2>&1; then
-          echo "::error::No benchmark results found for current commit ${SHA}."
-          echo "::error::Please run 'python3 -m perf.create_report' locally before pushing."
-          exit 1
-        fi
+        source .venv/bin/activate
+        python -m perf.create_report -b power_full_speed_mini
+        python -m perf.create_report -b power_full_precision_mini
+
+    - name: Sanity-run training
+      run: |
+        source .venv/bin/activate
+        cd train && python train.py --batch_size=1 --block_size=32 --max_iters=100 --run_name=ci/${{ github.sha }} --data_dir=/shared/datasets/ngpt_owt

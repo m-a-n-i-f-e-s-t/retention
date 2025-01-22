@@ -14,7 +14,7 @@ from power_attention._utils import compute_expanded_dim
 @torch.library.custom_op("power_attention::query_state", mutates_args=())
 def query_state(Q : torch.Tensor, S : torch.Tensor, Y : Optional[torch.Tensor],
                 rowmax : Optional[torch.Tensor],
-                deg : int, stabilizer : Optional[float], zero_initial_state : bool) -> torch.Tensor:
+                deg : int, scale : Optional[float], zero_initial_state : bool) -> torch.Tensor:
     r"""Compute query interaction with expanded state vectors.
 
     This function implements the query-state interaction from [1]. It computes how queries
@@ -32,7 +32,7 @@ def query_state(Q : torch.Tensor, S : torch.Tensor, Y : Optional[torch.Tensor],
     The computation can be numerically unstable in fp16, so we provide two stabilization
     mechanisms:
 
-    1. A stabilizer factor that scales the symmetric power embedding
+    1. A scaling factor that scales the symmetric power embedding
     2. Optional output scaling using Y and rowmax from the attention computation
 
     Args:
@@ -44,7 +44,7 @@ def query_state(Q : torch.Tensor, S : torch.Tensor, Y : Optional[torch.Tensor],
         rowmax: Optional scaling tensor of shape `(batch_size, num_chunks, chunk_size, num_heads)`.
            Used for numerical stability when provided.
         deg: Power attention degree. Must be even for symmetric power formulation.
-        stabilizer: Optional stabilization factor. Defaults to state_dim for fp16, 1.0 otherwise.
+        scale: Optional stabilization factor. Defaults to state_dim for fp16, 1.0 otherwise.
             Helps prevent overflow in symmetric power computation.
         zero_initial_state: Whether the initial state should be treated as zero.
 
@@ -56,35 +56,35 @@ def query_state(Q : torch.Tensor, S : torch.Tensor, Y : Optional[torch.Tensor],
         - Feature dimension must be 32 or 64
         - Inputs must be fp16 or bf16
         - chunk_size must be at least 128 and a multiple of 16
-        - Stabilization is particularly important for deg > 2
+        - Scaling is particularly important for deg > 2
 
     References:
         [1] J. Buckman, C. Gelada, and S. Zhang, "Symmetric Power Transformers." 
             Manifest AI, Aug. 15, 2024.
     """
     b, n, c, h, d = Q.shape
-    if stabilizer is None:
-        stabilizer = 1.
-    O = query_state_fwd(Q, S, Y, rowmax, deg, stabilizer, zero_initial_state)
+    if scale is None:
+        scale = 1.
+    O = query_state_fwd(Q, S, Y, rowmax, deg, scale, zero_initial_state)
     return O
 @query_state.register_fake
-def query_state_fake(Q, S, Y, rowmax, deg, stabilizer, zero_initial_state):
+def query_state_fake(Q, S, Y, rowmax, deg, scale, zero_initial_state):
     b, n, c, h, d = Q.shape
     return torch.empty(b, n, c, h, d, device=Q.device, dtype=Q.dtype)
 # Autograd setup
 def query_state_setup(ctx, inputs, output):
-    Q, S, Y, rowmax, deg, stabilizer, zero_initial_state = inputs
+    Q, S, Y, rowmax, deg, scale, zero_initial_state = inputs
     b, n, c, h, d = Q.shape
-    if stabilizer is None:
-        stabilizer = 1.
+    if scale is None:
+        scale = 1.
     ctx.save_for_backward(Q, S, rowmax)
     ctx.deg = deg
-    ctx.stabilizer = stabilizer
+    ctx.scale = scale
     ctx.fused = Y is not None
     ctx.zero_initial_state = zero_initial_state
 def query_state_backward(ctx, dO):
     Q, S, rowmax = ctx.saved_tensors
-    dQ, dS, dY_attn = query_state_bwd(Q, S, dO, rowmax, ctx.deg, ctx.stabilizer, ctx.zero_initial_state)
+    dQ, dS, dY_attn = query_state_bwd(Q, S, dO, rowmax, ctx.deg, ctx.scale, ctx.zero_initial_state)
     if ctx.fused:
         dY = dY_attn
     else:
@@ -96,7 +96,7 @@ torch.library.register_autograd(
 )
 
 # Useful function to create sample inputs
-def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, device='cuda', requires_grad=False, seed=42, zero_initial_state=False, stabilizer=None, q_std=1.0, S_std=1.0, Y_std=1.0, rowmax_std=1.0):
+def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, device='cuda', requires_grad=False, seed=42, zero_initial_state=False, scale=None, q_std=1.0, S_std=1.0, Y_std=1.0, rowmax_std=1.0):
     torch.manual_seed(seed)
     deg = 2
     D = compute_expanded_dim(d, deg)
@@ -113,7 +113,7 @@ def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, 
     if requires_grad:
         Q, S, Y = tree_map(
             lambda x: x.requires_grad_(True) if x is not None else None, (Q, S, Y))
-    return dict(Q=Q, S=S, Y=Y, rowmax=rowmax, deg=deg, stabilizer=stabilizer, zero_initial_state=zero_initial_state)
+    return dict(Q=Q, S=S, Y=Y, rowmax=rowmax, deg=deg, scale=scale, zero_initial_state=zero_initial_state)
 
 ## TUTORIAL ##
 if __name__ == '__main__':
