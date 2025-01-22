@@ -29,13 +29,11 @@ check-test-version:
 	@python scripts/version_check.py "$(VERSION)" "$(PACKAGE_NAME)" --test
 
 # Release commands
-release: clean check-version
-	@echo "Building wheels with cibuildwheel..."
-	python -m cibuildwheel --output-dir dist
-	python -m build -s
+release:
 	python -m twine check dist/*
 	@echo "Uploading to PyPI..."
-	python -m twine upload dist/* @echo "Release $(VERSION) completed!"
+	python -m twine upload dist/*
+	@echo "Release $(VERSION) completed!"
 
 release-test: clean check-test-version
 	@echo "Building wheels with cibuildwheel..."
