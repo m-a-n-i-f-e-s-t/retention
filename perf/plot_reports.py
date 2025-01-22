@@ -203,7 +203,7 @@ def main(benchmarks: List[str], filter: List[str], output: str):
                              datetime=report['datetime'], 
                              measurements=filter_measurements(report['measurements'], benchmarks, filter)) 
                         for report in reports]
-    
+
     # Create and show/save the plot
     p = create_plot(filtered_reports)
     if output:
