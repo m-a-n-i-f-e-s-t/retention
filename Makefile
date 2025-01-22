@@ -13,11 +13,18 @@ ifeq ($(PYTHON),)
     $(error Python 3.11 or higher is required. Please install Python 3.11+)
 endif
 
-.PHONY: clean check-version check-test-version release release-test help plot-regressions
+.PHONY: clean check-version check-test-version release release-test help plot-regressions refresh-deps kernel
 
 # Clean and check
 clean:
 	rm -rf dist/ build/ *.egg-info/ *.so wheelhouse/
+
+kernel:
+	@python setup.py build_ext --inplace
+
+refresh-deps:
+	@echo "Reinstalling development dependencies..."
+	@sh scripts/install_dev_deps.sh
 
 # Version checking
 check-version:
