@@ -88,6 +88,7 @@
     which: X_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.12412643432617188
 - attrs:
     b: 1
@@ -101,6 +102,7 @@
     which: log_G_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 234.0341796875
 - attrs:
     b: 1
@@ -114,6 +116,7 @@
     which: X_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.013227462768554688
 - attrs:
     b: 1
@@ -127,6 +130,7 @@
     which: log_G_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 5.65313720703125
 - attrs:
     b: 1
@@ -139,6 +143,7 @@
     direction: fwd
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.09268379211425781
 - attrs:
     b: 1
@@ -151,6 +156,7 @@
     direction: fwd
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.043224334716796875
 - attrs:
     b: 1
@@ -164,6 +170,7 @@
     which: X_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.12412643432617188
 - attrs:
     b: 1
@@ -177,6 +184,7 @@
     which: log_G_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 40.188720703125
 - attrs:
     b: 1
@@ -190,6 +198,7 @@
     which: X_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.013227462768554688
 - attrs:
     b: 1
@@ -203,6 +212,7 @@
     which: log_G_grad
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 2.6440048217773438
 - attrs:
     b: 1
@@ -215,6 +225,7 @@
     direction: fwd
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.08323287963867188
 - attrs:
     b: 1
@@ -227,6 +238,7 @@
     direction: fwd
     benchmark: discumsum_precision
     fn: discumsum_precision
+    relative: false
   value: 0.03223705291748047
 - attrs:
     b: 2
@@ -321,6 +333,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 226.02471923828125
 - attrs:
     t: 16384
@@ -337,6 +350,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 3819.447509765625
 - attrs:
     t: 16384
@@ -353,6 +367,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 90.81649780273438
 - attrs:
     t: 16384
@@ -369,6 +384,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 56.05271530151367
 - attrs:
     t: 16384
@@ -385,6 +401,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 65.90940856933594
 - attrs:
     t: 16384
@@ -401,6 +418,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 8.895790100097656
 - attrs:
     t: 16384
@@ -417,6 +435,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 5.142306327819824
 - attrs:
     t: 16384
@@ -432,6 +451,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 308.4642333984375
 - attrs:
     t: 16384
@@ -447,6 +467,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 3.3704607486724854
 - attrs:
     t: 16384
@@ -463,6 +484,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 8059.82421875
 - attrs:
     t: 16384
@@ -479,6 +501,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 69610.4453125
 - attrs:
     t: 16384
@@ -495,6 +518,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 4235.31787109375
 - attrs:
     t: 16384
@@ -511,6 +535,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 838.449462890625
 - attrs:
     t: 16384
@@ -527,6 +552,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 1099.536865234375
 - attrs:
     t: 16384
@@ -543,6 +569,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 271.2037048339844
 - attrs:
     t: 16384
@@ -559,6 +586,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 331.51141357421875
 - attrs:
     t: 16384
@@ -574,6 +602,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 7069.82275390625
 - attrs:
     t: 16384
@@ -589,6 +618,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 82.67034912109375
 - attrs:
     t: 16384
@@ -605,6 +635,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 1301.54931640625
 - attrs:
     t: 16384
@@ -621,6 +652,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 25007.189453125
 - attrs:
     t: 16384
@@ -637,6 +669,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 601.0252685546875
 - attrs:
     t: 512
@@ -653,6 +686,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 55.75320053100586
 - attrs:
     t: 512
@@ -669,6 +703,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 263.8404541015625
 - attrs:
     t: 512
@@ -685,6 +720,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 26.458972930908203
 - attrs:
     t: 16384
@@ -701,6 +737,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 241.65179443359375
 - attrs:
     t: 16384
@@ -717,6 +754,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 355.1236267089844
 - attrs:
     t: 16384
@@ -733,6 +771,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 72.82417297363281
 - attrs:
     t: 16384
@@ -749,6 +788,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 149.917236328125
 - attrs:
     t: 512
@@ -765,6 +805,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.3365945816040039
 - attrs:
     t: 512
@@ -781,6 +822,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.29859495162963867
 - attrs:
     t: 512
@@ -797,6 +839,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.213295578956604
 - attrs:
     t: 512
@@ -813,6 +856,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.07155895233154297
 - attrs:
     t: 16384
@@ -828,6 +872,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 3349.18798828125
 - attrs:
     t: 512
@@ -843,6 +888,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 26.500843048095703
 - attrs:
     t: 16384
@@ -858,6 +904,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 30.332605361938477
 - attrs:
     t: 512
@@ -873,6 +920,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.07111603021621704
 - attrs:
     t: 16384
@@ -889,6 +937,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 576322.5
 - attrs:
     t: 16384
@@ -905,6 +954,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 3801064.75
 - attrs:
     t: 16384
@@ -921,6 +971,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 195496.75
 - attrs:
     t: 512
@@ -937,6 +988,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 658.3994140625
 - attrs:
     t: 512
@@ -953,6 +1005,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 3157.51513671875
 - attrs:
     t: 512
@@ -969,6 +1022,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 333.17242431640625
 - attrs:
     t: 16384
@@ -985,6 +1039,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 59630.63671875
 - attrs:
     t: 16384
@@ -1001,6 +1056,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 67578.078125
 - attrs:
     t: 16384
@@ -1017,6 +1073,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 11452.5263671875
 - attrs:
     t: 16384
@@ -1033,6 +1090,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 26952.48828125
 - attrs:
     t: 512
@@ -1049,6 +1107,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 11.710882186889648
 - attrs:
     t: 512
@@ -1065,6 +1124,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 12.266502380371094
 - attrs:
     t: 512
@@ -1081,6 +1141,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 5.213859558105469
 - attrs:
     t: 512
@@ -1097,6 +1158,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 1.8346490859985352
 - attrs:
     t: 16384
@@ -1112,6 +1174,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 524284.78125
 - attrs:
     t: 512
@@ -1127,6 +1190,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 261.1273498535156
 - attrs:
     t: 16384
@@ -1142,6 +1206,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 3727.6748046875
 - attrs:
     t: 512
@@ -1157,6 +1222,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 1.3388242721557617
 - attrs:
     t: 16384
@@ -1173,6 +1239,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 1.1173858642578125
 - attrs:
     t: 16384
@@ -1189,6 +1256,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.6630477905273438
 - attrs:
     t: 16384
@@ -1205,6 +1273,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.4789886474609375
 - attrs:
     t: 512
@@ -1221,6 +1290,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.25661468505859375
 - attrs:
     t: 512
@@ -1237,6 +1307,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.13099288940429688
 - attrs:
     t: 512
@@ -1253,6 +1324,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.07236957550048828
 - attrs:
     t: 16384
@@ -1269,6 +1341,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 15.251373291015625
 - attrs:
     t: 16384
@@ -1285,6 +1358,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 17.033767700195312
 - attrs:
     t: 16384
@@ -1301,6 +1375,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.13350170850753784
 - attrs:
     t: 16384
@@ -1317,6 +1392,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.1873229742050171
 - attrs:
     t: 512
@@ -1333,6 +1409,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.3365945816040039
 - attrs:
     t: 512
@@ -1349,6 +1426,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.24046897888183594
 - attrs:
     t: 512
@@ -1365,6 +1443,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.060118794441223145
 - attrs:
     t: 512
@@ -1381,6 +1460,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.07152223587036133
 - attrs:
     t: 16384
@@ -1396,6 +1476,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.09796333312988281
 - attrs:
     t: 512
@@ -1411,6 +1492,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.013705551624298096
 - attrs:
     t: 16384
@@ -1426,6 +1508,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.05576758086681366
 - attrs:
     t: 512
@@ -1441,6 +1524,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.0189974308013916
 - attrs:
     t: 16384
@@ -1457,6 +1541,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 11.823974609375
 - attrs:
     t: 16384
@@ -1473,6 +1558,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.4563407897949219
 - attrs:
     t: 16384
@@ -1489,6 +1575,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 6.02587890625
 - attrs:
     t: 512
@@ -1505,6 +1592,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.4462127685546875
 - attrs:
     t: 512
@@ -1521,6 +1609,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.1181640625
 - attrs:
     t: 512
@@ -1537,6 +1626,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.2321929931640625
 - attrs:
     t: 16384
@@ -1553,6 +1643,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 7.0663604736328125
 - attrs:
     t: 16384
@@ -1569,6 +1660,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 6.279838562011719
 - attrs:
     t: 16384
@@ -1585,6 +1677,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.08096671104431152
 - attrs:
     t: 16384
@@ -1601,6 +1694,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.16188955307006836
 - attrs:
     t: 512
@@ -1617,6 +1711,7 @@
     which: K_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.32708740234375
 - attrs:
     t: 512
@@ -1633,6 +1728,7 @@
     which: Q_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.3365192413330078
 - attrs:
     t: 512
@@ -1649,6 +1745,7 @@
     which: V_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.030136823654174805
 - attrs:
     t: 512
@@ -1665,6 +1762,7 @@
     which: log_G_grad
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.036243438720703125
 - attrs:
     t: 16384
@@ -1680,6 +1778,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.044075965881347656
 - attrs:
     t: 512
@@ -1695,6 +1794,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.010312318801879883
 - attrs:
     t: 16384
@@ -1710,6 +1810,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.02736961841583252
 - attrs:
     t: 512
@@ -1725,6 +1826,7 @@
     direction: fwd
     benchmark: power_full_precision
     fn: power_full_precision
+    relative: false
   value: 0.01209266483783722
 - attrs:
     b: 1
@@ -1740,6 +1842,7 @@
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.1837596893310547
 - attrs:
     b: 1
@@ -1755,6 +1858,7 @@
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.06508827209472656
 - attrs:
     b: 1
@@ -1770,6 +1874,7 @@
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 1.2263946533203125
 - attrs:
     b: 1
@@ -1785,6 +1890,7 @@
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.1927337646484375
 - attrs:
     b: 1
@@ -1800,6 +1906,7 @@
     which: Y_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.0
 - attrs:
     b: 1
@@ -1814,6 +1921,7 @@
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.04810070991516113
 - attrs:
     b: 1
@@ -1828,6 +1936,7 @@
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.21454238891601562
 - attrs:
     b: 1
@@ -1843,6 +1952,7 @@
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.1837596893310547
 - attrs:
     b: 1
@@ -1858,6 +1968,7 @@
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 1.0306396484375
 - attrs:
     b: 1
@@ -1873,6 +1984,7 @@
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 5.844482421875
 - attrs:
     b: 1
@@ -1888,6 +2000,7 @@
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 2.09210205078125
 - attrs:
     b: 1
@@ -1903,6 +2016,7 @@
     which: Y_grad
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.0
 - attrs:
     b: 1
@@ -1917,6 +2031,7 @@
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 0.06538581848144531
 - attrs:
     b: 1
@@ -1931,6 +2046,7 @@
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
+    relative: false
   value: 1.2497100830078125
 - attrs:
     b: 2

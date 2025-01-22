@@ -69,6 +69,7 @@ other_param_ranges = {
     'gating': [False, True],
     'deg': [1, 2],
     'direction': ['fwd', 'bwd'],
+    'relative': [False, True],
 }
 PRECISION_TEST_CASES = [
     {**shape, **dict(zip(other_param_ranges.keys(), values))}
