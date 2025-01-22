@@ -42,14 +42,15 @@ def query_state(Q : torch.Tensor, S : torch.Tensor, Y : Optional[torch.Tensor],
         Y: Optional output tensor of shape `(batch_size, num_chunks, chunk_size, num_heads, head_dim)`.
            Used for output scaling when provided.
         rowmax: Optional scaling tensor of shape `(batch_size, num_chunks, chunk_size, num_heads)`.
-           Used for numerical stability when provided.
+           Used for matching the scale of the attention output and that of the query state output.
         deg: Power attention degree. Must be even for symmetric power formulation.
         scale: Optional stabilization factor. Defaults to state_dim for fp16, 1.0 otherwise.
             Helps prevent overflow in symmetric power computation.
         zero_initial_state: Whether the initial state should be treated as zero.
 
     Returns:
-        O: Output tensor of shape `(batch_size, num_chunks, chunk_size, num_heads, head_dim)`.
+        O: Output tensor of shape `(batch_size, num_chunks, chunk_size, num_heads, head_dim)`. 
+           Note that the output is normalized by the minimum of the scale and the rowmax.
 
     Note:
         - Q must be contiguous along the last dimension

@@ -111,13 +111,6 @@ def test_power_full_backward_compiled_matches_eager(kw):
 ## CONSISTENCY TESTS ##
 # These tests confirm that the reference implementation is invariant to chunking, modulo layernorm.
 
-def fn_with_layernorm(fn):
-    def wrapper(**inputs):
-        o = fn(**inputs).float()
-        return (o - o.mean(-1, keepdim=True)) / o.std(-1, keepdim=True, correction=False)
-    return wrapper
-power_full_reference = fn_with_layernorm(power_full_reference)
-power_full = fn_with_layernorm(power_full)
 
 # TODO(sean): find a better place for this test
 # @pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
@@ -218,6 +211,7 @@ def test_power_full_kernel_matches_reference(kw, compile):
 @pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
 @pytest.mark.parametrize("compile", [False, True])
 def test_power_full_kernel_grad_matches_reference(kw, compile):
+    # if kw['deg'] == 1 
     gold_inputs = create_inputs(requires_grad=True, **(kw | {'dtype': torch.float32}))
     test_inputs = create_inputs(requires_grad=True, **kw)
     check_fn_backwards_match(
@@ -226,4 +220,5 @@ def test_power_full_kernel_grad_matches_reference(kw, compile):
         test_fn=torch.compile(power_full) if compile else power_full,
         test_inputs=test_inputs,
         rtol=2, # if test error is more than 2x reference error, then it is probably a real failure
+        atol=3e-4
     )

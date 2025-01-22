@@ -45,7 +45,7 @@ def attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor,
         Tuple containing:
             - Y: Output tensor of shape `(batch_size, seq_len, num_heads, head_dim)`.
             - y: Normalization factors of shape `(batch_size, seq_len, num_heads)`.
-            - rowmax: Row-wise maximum values of shape `(batch_size, seq_len, num_heads)`.
+            - rowmax: Row-wise maximum values of shape `(batch_size, seq_len, num_heads)`, always in log space.
 
     Note:
         - Input tensors must have matching dtypes (fp16 or bf16)

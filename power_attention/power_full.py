@@ -10,7 +10,7 @@ from power_attention._attention import attention, attention_reference
 from power_attention._update_state import update_state, update_state_reference
 from power_attention._discumsum import discumsum, discumsum_reference
 from power_attention._query_state import query_state, query_state_reference
-from power_attention._utils import compute_expanded_dim
+from power_attention._utils import compute_expanded_dim, layernorm
 import math
 
 
@@ -39,14 +39,39 @@ def update_state_matmul(K, V, *args):
     # Output: [b,n,h,D,d]
     return torch.matmul(K.permute(0, 1, 3, 4, 2), V.transpose(2, 3))  # [b,n,h,D,d]
 
-def query_state_matmul(Q, S, attn_Y, rowmax, deg, scale, zero_initial_state):
-    # Q: [b,n,c,h,D]
-    # S: [b,n,h,D,d]
-    # Output: [b,n,c,h,d]
-    correction = torch.exp(-rowmax)
-    qs_Y = torch.matmul((Q * correction.unsqueeze(-1)).to(Q.dtype).transpose(2, 3), S).transpose(2, 3)  # [b,n,c,h,d]
-    return attn_Y + qs_Y
+def post_query_state(Y, rowmax, scale, zero_initial_state):
+    """Post-process the query state output with layernorm.
+    """
+    scale_tensor = torch.tensor(1 / scale, device=rowmax.device, dtype=rowmax.dtype)
+    scale_attn = torch.exp(-rowmax)
+    min_scale = torch.min(scale_tensor, scale_attn)
+    if zero_initial_state:
+        min_scale[:, 0:1] = scale_attn.narrow(1, 0, 1)
+    return layernorm(Y, eps=min_scale*1e-5)
 
+def query_state_matmul(Q, S, attn_Y, rowmax, deg, scale, zero_initial_state):
+    """Query state implementation using matmul. This implementation is used when deg == 1.
+    Note that unlike the cutlass implementation, the final scaling doesn't discriminate between
+    the first chunk and the rest, because torch.compile doesn't work well with in-place operations.
+
+    Args:
+        Q: [b,n,c,h,D]
+        S: [b,n,h,D,d]
+        attn_Y: [b,n,c,h,d]
+        rowmax: [b,n,c,h]
+        deg: int
+        scale: float
+        zero_initial_state: bool
+    """
+    b, n, c, h, d = Q.shape
+    Y = torch.matmul(Q.to(Q.dtype).transpose(2, 3), S / scale).transpose(2, 3)  # [b,n,c,h,d]
+    scale_qs = torch.tensor(1 / scale, dtype=Q.dtype, device=Q.device)
+    scale_attn = torch.exp(-rowmax)
+    min_scale = torch.min(scale_qs, scale_attn)
+    qs_factor = min_scale / scale_qs
+    attn_factor = min_scale / scale_attn
+    Y = attn_Y * attn_factor.unsqueeze(-1) + Y * qs_factor.unsqueeze(-1)
+    return layernorm(Y, eps=min_scale*1e-5)
 
 IMPL_MAP = {
     UpdateStateImpl.CUTLASS: update_state,
@@ -178,9 +203,11 @@ def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryS
                 if gating:
                     log_G = log_G.repeat_interleave(qhead_ratio, dim=2)
             log_G_accum = log_G.cumsum(1) if log_G is not None else None
-            Y, _, _ = _attention(Q, K, V, log_G_accum, deg, scale)
+            Y, _, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
             assert Y.is_contiguous(), 'Y must be contiguous'
-            return Y
+            rowmax = rowmax - math.log(scale)
+            out = layernorm(Y, eps=torch.exp(-rowmax)*1e-5)
+            return out
 
         # Reshape into chunks
         Q = Q.view(b, n, c, hq, d)
@@ -236,10 +263,11 @@ def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryS
             S = S.repeat_interleave(qhead_ratio, dim=2)
         D = float(compute_expanded_dim(d, deg))
         Y = _query_state(Q.contiguous(), S.contiguous(), attn_Y.contiguous(), rowmax.contiguous(), deg, D, initial_state is None)
+        if deg > 1:
+            Y = post_query_state(Y, rowmax, D, initial_state is None)
 
         # Epilogue
         out = Y.contiguous().view(b, t, hq, d).to(dtype)
-        # out = F.layer_norm(out, (d,), weight=None, bias=None, eps=1e-8)
         return out
 
     _power_full.__doc__ = POWER_FULL_DOC
@@ -261,7 +289,7 @@ def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, de
     else:
         log_G = None
     initial_state = None
-    scale = (1./d)**deg
+    scale = 1.0
     if requires_grad:
         Q, K, V, log_G, initial_state = tree_map(
             lambda x: x.requires_grad_(True) if x is not None else None, (Q, K, V, log_G, initial_state))
