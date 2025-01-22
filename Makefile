@@ -47,7 +47,7 @@ build:
 test: deps-test
 	$(PYTEST) perf/tests
 benchmark: deps-benchmark
-	$(VENV_DIR)/bin/python test/benchmark.py
+	$(VENV_DIR)/bin/python perf/create_report.py
 
 
 # Clean and check
