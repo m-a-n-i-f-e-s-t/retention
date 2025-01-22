@@ -36,24 +36,27 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
-benchmark = [
-  "matplotlib",
-  "pandas"
-]
+
 dev = [
-  "twine",
-  "pytest>=8.3.4",
-  "pytest-xdist",
-  "cibuildwheel",
-  "auditwheel",
-  "wheel",
-  "build"
-]
-train = [
   "tiktoken",
   "datasets",
   "httpx",
-  "tqdm"
+  "tqdm", 
+  "pytest>=8.3.4",
+  "pytest-xdist",
+  "wheel",
+  "build",
+  "cibuildwheel",
+  "auditwheel",
+  "twine",
+  "click",
+  "pyyaml",
+  "bokeh",
+  "matplotlib",
+  "pymdown-extensions",
+  "mkdocs",
+  "mkdocstrings-python",
+  "requests"
 ]
 
 [tool.cibuildwheel]

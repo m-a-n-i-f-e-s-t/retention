@@ -45,9 +45,7 @@ init_from = 'scratch' # 'scratch' or 'resume'
 # logging
 run_name = None
 disable_logging = False
-wandb_log = False # disabled by default
-wandb_project = 'owt'
-wandb_run_name = 'gpt2' # 'run' + str(time.time())
+wandb_project = None
 # data
 data_dir = os.path.expanduser('~/mai_datasets/ngpt_owt')
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
@@ -267,12 +265,10 @@ if master_process and not disable_logging:
     import logger
     run_name = logger.init(
         name=run_name,
-        info={'config': config}
+        info={'config': config},
+        wandb_project=wandb_project
     )
     print(f"\033[37mLogging as \033[34m{run_name}\033[37m.\033[0m")
-if wandb_log and master_process:
-    import wandb
-    wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
@@ -306,15 +302,6 @@ while True:
                 "lr": lr,
                 "train_hours": (time.time() - train_start_time - total_eval_time) / 3600,  # Convert seconds to hours
                 "total_hours": (time.time() - train_start_time) / 3600,  # Convert seconds to hours
-            })
-        if wandb_log:
-            wandb.log({
-                "iter": iter_num,
-                "train/avg_loss": losses['train/avg'],
-                "val/avg_loss": losses['val/avg'],
-                "train/tail_loss": losses['train/tail'],
-                "val/tail_loss": losses['val/tail'],
-                "lr": lr,
             })
         if losses['val/avg'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val/avg']
