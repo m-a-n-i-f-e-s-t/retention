@@ -116,7 +116,8 @@ def fn_with_layernorm(fn):
         o = fn(**inputs).float()
         return (o - o.mean(-1, keepdim=True)) / o.std(-1, keepdim=True, correction=False)
     return wrapper
-power_full_reference_layernorm = fn_with_layernorm(power_full_reference)
+power_full_reference = fn_with_layernorm(power_full_reference)
+power_full = fn_with_layernorm(power_full)
 
 # TODO(sean): find a better place for this test
 # @pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
@@ -126,7 +127,7 @@ power_full_reference_layernorm = fn_with_layernorm(power_full_reference)
 #     inputs_normal_space = create_inputs(**(kw | {'log_space': False, 'dtype': torch.float32}))
 
 #     check_inputs_forwards_match(
-#         fn=power_full_reference_layernorm,
+#         fn=power_full_reference,
 #         inputs1=inputs_log_space,
 #         inputs2=inputs_normal_space,
 #         atol=1e-1,
@@ -138,7 +139,7 @@ power_full_reference_layernorm = fn_with_layernorm(power_full_reference)
 #     inputs_log_space = create_inputs(**(kw | {'log_space': True, 'dtype': torch.float32}), requires_grad=True)
 #     inputs_normal_space = create_inputs(**(kw | {'log_space': False, 'dtype': torch.float32}), requires_grad=True)
 #     check_inputs_backwards_match(
-#         fn=power_full_reference_layernorm,
+#         fn=power_full_reference,
 #         inputs1=inputs_log_space,
 #         inputs2=inputs_normal_space,
 #         atol=1e-3,
@@ -151,7 +152,7 @@ def test_power_full_reference_chunk_size_consistency(kw):
     inputs_attention = create_inputs(**(kw | {'chunk_size': None, 'dtype': torch.float32}))
     inputs_recurrent = create_inputs(**(kw | {'dtype': torch.float32}))
     check_inputs_forwards_match(
-        fn=power_full_reference_layernorm,
+        fn=power_full_reference,
         inputs1=inputs_attention,
         inputs2=inputs_recurrent,
         atol=1e-1,
@@ -163,7 +164,7 @@ def test_power_full_reference_chunk_size_grad_consistency(kw):
     inputs_attention = create_inputs(**(kw | {'chunk_size': None, 'dtype': torch.float32}), requires_grad=True)
     inputs_recurrent = create_inputs(**(kw | {'dtype': torch.float32}), requires_grad=True)
     check_inputs_backwards_match(
-        fn=power_full_reference_layernorm,
+        fn=power_full_reference,
         inputs1=inputs_attention,
         inputs2=inputs_recurrent,
         atol=1e-3,

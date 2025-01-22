@@ -72,9 +72,15 @@ while maintaining tractable state sizes.
 For a sequence of queries $Q_i$, keys $K_i$, and values $V_i ∈ ℝ^d$, the attention mechanism
 computes outputs $Y_i ∈ ℝ^d$ as:
 
-$$Y_i = \sum_{j=1}^i A_{ij} V_j$$
+$$Y_i = Norm(\sum_{j=1}^i A_{ij} V_j)$$
 
-where the attention weights are:
+where $Norm$ is a parameter-free layer normalization as follows:
+
+$$Norm(x) = \frac{x - \mu(x)}{\sigma(x)}$$
+
+where $\mu(x)$ and $\sigma(x)$ are the mean and standard deviation of $x$ along the feature dimension.
+
+The attention weights are computed as follows:
 
 $$A_{ij} = \frac{\phi(Q_i)^\top \phi(K_j)}{\sum_{k=1}^i \phi(Q_i)^\top \phi(K_k)}$$
 
@@ -233,6 +239,7 @@ def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryS
 
         # Epilogue
         out = Y.contiguous().view(b, t, hq, d).to(dtype)
+        # out = F.layer_norm(out, (d,), weight=None, bias=None, eps=1e-8)
         return out
 
     _power_full.__doc__ = POWER_FULL_DOC
