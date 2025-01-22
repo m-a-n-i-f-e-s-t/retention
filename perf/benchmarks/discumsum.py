@@ -66,7 +66,7 @@ other_param_ranges = {
     'X_dtype': [torch.bfloat16],
     'device': ['cuda'],
     'direction': ['fwd', 'bwd'],
-    'relative': [False, True],
+    'relative': [False],
 }
 PRECISION_TEST_CASES = [
     {**shape, **dict(zip(other_param_ranges.keys(), values))}

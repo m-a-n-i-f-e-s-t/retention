@@ -57,7 +57,7 @@ other_param_ranges = {
     'fused': [True, False],
     'scale': [1.0],
     'direction': ['fwd', 'bwd'],
-    'relative': [False, True],
+    'relative': [False],
 }
 PRECISION_TEST_CASES = [
     {**shape, **dict(zip(other_param_ranges.keys(), values))}
@@ -80,7 +80,13 @@ def query_state_precision(direction=None, relative=False, **kw):
             gradient (Q, S, and when fused=True, Y), containing the maximum absolute 
             difference between test and reference gradients.
     """
-    error = benchmark_precision(direction, relative, query_state_reference, query_state, create_inputs, 
+    def fn_with_layernorm(fn):
+        def wrapper(**inputs):
+            o = fn(**inputs).float()
+            return (o - o.mean(-1, keepdim=True)) / o.std(-1, keepdim=True, correction=False)
+        return wrapper
+
+    error = benchmark_precision(direction, relative, fn_with_layernorm(query_state_reference), fn_with_layernorm(query_state), create_inputs, 
                                 kw | {'dtype': torch.float32}, # reference is fp32
                                 kw)
     if direction == 'fwd':

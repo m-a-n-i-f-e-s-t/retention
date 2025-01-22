@@ -1837,12 +1837,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.1837596893310547
 - attrs:
     b: 1
@@ -1853,12 +1853,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.06508827209472656
 - attrs:
     b: 1
@@ -1869,12 +1869,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 1.2263946533203125
 - attrs:
     b: 1
@@ -1885,12 +1885,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.1927337646484375
 - attrs:
     b: 1
@@ -1901,12 +1901,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     which: Y_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.0
 - attrs:
     b: 1
@@ -1917,11 +1917,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.04810070991516113
 - attrs:
     b: 1
@@ -1932,11 +1932,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.21454238891601562
 - attrs:
     b: 1
@@ -1947,12 +1947,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.1837596893310547
 - attrs:
     b: 1
@@ -1963,12 +1963,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 1.0306396484375
 - attrs:
     b: 1
@@ -1979,12 +1979,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     which: Q_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 5.844482421875
 - attrs:
     b: 1
@@ -1995,12 +1995,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     which: S_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 2.09210205078125
 - attrs:
     b: 1
@@ -2011,12 +2011,12 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     which: Y_grad
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.0
 - attrs:
     b: 1
@@ -2027,11 +2027,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 0.06538581848144531
 - attrs:
     b: 1
@@ -2042,11 +2042,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd
     benchmark: query_state_precision
     fn: query_state_precision
     relative: false
+    scale: 1.0
   value: 1.2497100830078125
 - attrs:
     b: 2
@@ -2825,11 +2825,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 3.6645376205444338
 - attrs:
     b: 2
@@ -2840,11 +2840,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 3.8598623275756836
 - attrs:
     b: 2
@@ -2855,11 +2855,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 1.3093888282775878
 - attrs:
     b: 2
@@ -2870,11 +2870,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 1.4025728702545166
 - attrs:
     b: 2
@@ -2885,11 +2885,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 4.9733116149902346
 - attrs:
     b: 2
@@ -2900,11 +2900,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 5.260236740112305
 - attrs:
     b: 2
@@ -2915,11 +2915,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 6.085120010375976
 - attrs:
     b: 2
@@ -2930,11 +2930,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 6.265652847290039
 - attrs:
     b: 2
@@ -2945,11 +2945,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 1.309183931350708
 - attrs:
     b: 2
@@ -2960,11 +2960,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 1.4087167263031006
 - attrs:
     b: 2
@@ -2975,11 +2975,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 7.404032135009766
 - attrs:
     b: 2
@@ -2990,11 +2990,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 7.677747344970703
 - attrs:
     b: 64
@@ -3773,11 +3773,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 7.131801986694336
 - attrs:
     b: 64
@@ -3788,11 +3788,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 7.509043121337891
 - attrs:
     b: 64
@@ -3803,11 +3803,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 2.5203712463378904
 - attrs:
     b: 64
@@ -3818,11 +3818,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 2.693068790435791
 - attrs:
     b: 64
@@ -3833,11 +3833,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 9.645823669433593
 - attrs:
     b: 64
@@ -3848,11 +3848,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 10.20768928527832
 - attrs:
     b: 64
@@ -3863,11 +3863,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 6.090649795532227
 - attrs:
     b: 64
@@ -3878,11 +3878,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 6.2633411407470705
 - attrs:
     b: 64
@@ -3893,11 +3893,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 1.312051248550415
 - attrs:
     b: 64
@@ -3908,11 +3908,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 1.4069247245788574
 - attrs:
     b: 64
@@ -3923,11 +3923,11 @@
     dtype: torch.bfloat16
     device: cuda
     fused: false
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 7.392716598510742
 - attrs:
     b: 64
@@ -3938,9 +3938,9 @@
     dtype: torch.bfloat16
     device: cuda
     fused: true
-    stabilizer: 1.0
     direction: fwd+bwd
     gpus: 1xA6000
     benchmark: query_state_speed
     fn: query_state_speed
+    scale: 1.0
   value: 7.664995193481445
