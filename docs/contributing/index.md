@@ -47,9 +47,11 @@ git checkout -b feature-name
 ### Testing
 
 - Add tests for new features
-- Ensure all tests pass: `make test`
+- Ensure all tests pass: `pytest`
+- Ensure all benchmarks run: `./scripts/test_benchmark.sh`
+- If you made big changes that may affect training dynamics, run `./scripts/test_train.sh`
 - Include both unit tests and integration tests where appropriate
-- For CUDA kernels, add precision tests comparing against reference implementations
+- For CUDA kernels, add precision benchmarks comparing against reference implementations
 
 ### Performance
 

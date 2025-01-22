@@ -41,10 +41,9 @@ jobs:
     - name: Sanity-run benchmarks
       run: |
         source .venv/bin/activate
-        python -m perf.create_report -b power_full_speed_mini
-        python -m perf.create_report -b power_full_precision_mini
+        ./scripts/test_benchmark.sh
 
     - name: Sanity-run training
       run: |
         source .venv/bin/activate
-        cd train && python train.py --batch_size=1 --block_size=32 --max_iters=100 --run_name=ci/${{ github.sha }} --data_dir=/shared/datasets/ngpt_owt
+        ./scripts/test_train.sh

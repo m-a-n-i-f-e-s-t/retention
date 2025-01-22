@@ -31,13 +31,9 @@ $(VENV_DIR)/.deps_venv: # Ensure venv is created and make venv is idempotent
 	tourch $@
 $(VENV_DIR)/.deps_test: $(VENV_DIR)/.deps_venv
 	@$(call get_deps,test) | $(PIP) install -r /dev/stdin && touch $@
-$(VENV_DIR)/.deps_benchmark: $(VENV_DIR)/.deps_venv
-	@$(call get_deps,benchmark) | $(PIP) install -r /dev/stdin && touch $@
 
 venv: $(VENV_DIR)/.deps_venv
 deps-test: venv $(VENV_DIR)/.deps_test
-deps-benchmark: venv $(VENV_DIR)/.deps_benchmark
-
 
 # Development commands
 dev:
@@ -46,8 +42,6 @@ build:
 	$(PIP) install .
 test: deps-test
 	$(PYTEST) perf/tests
-benchmark: deps-benchmark
-	$(VENV_DIR)/bin/python perf/create_report.py
 
 
 # Clean and check
@@ -80,6 +74,11 @@ release-test: clean check-test-version
 	python -m twine upload --repository testpypi dist/*
 	@echo "Test release $(VERSION) completed!"
 
+# Visualization
+plot-regressions:
+	@echo "Generating regression visualization..."
+	$(PYTHON) perf/plot_regressions.py
+
 # Help
 help:
 	@echo "Available commands:"
@@ -93,4 +92,5 @@ help:
 	@echo "  make release-test  - Release to TestPyPI"
 	@echo "  make check-version - Check version against PyPI"
 	@echo "  make check-test-version - Check version against TestPyPI"
+	@echo "  make plot-regressions  - Generate interactive regression visualization"
 	@echo "Current version: $(VERSION)" 
