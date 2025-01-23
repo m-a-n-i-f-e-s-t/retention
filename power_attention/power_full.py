@@ -150,14 +150,8 @@ References:
         Manifest AI, Aug. 15, 2024.
 """
 
-def pick_impl(impl: Enum):
-    """ Given an implementation enum, return the corresponding implementation function.
-    """
-    if impl not in IMPL_MAP:
-        raise ValueError(f"Invalid implementation: {impl}")
-    return IMPL_MAP[impl]
 
-def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryStateImpl, discumsum_impl: DiscumsumImpl, attention_impl: AttentionImpl):
+def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryStateImpl, discumsum_impl: DiscumsumImpl, attention_impl: AttentionImpl):
     """ Create a power_full function with the given implementations.
     """
     def _power_full(Q, K, V, log_G=None, initial_state=None,
@@ -166,13 +160,13 @@ def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryS
             raise NotImplementedError('Initial state not implemented')
 
         if deg == 1: # when deg == 1, update_state and query_state are essentially matmuls
-            _update_state = pick_impl(UpdateStateImpl.MATMUL)
-            _query_state = pick_impl(QueryStateImpl.MATMUL)
+            _update_state = IMPL_MAP[UpdateStateImpl.MATMUL]
+            _query_state = IMPL_MAP[QueryStateImpl.MATMUL]
         else:
-            _update_state = pick_impl(update_state_impl)
-            _query_state = pick_impl(query_state_impl)
-        _discumsum = pick_impl(discumsum_impl)
-        _attention = pick_impl(attention_impl)
+            _update_state = IMPL_MAP[update_state_impl]
+            _query_state = IMPL_MAP[query_state_impl]
+        _discumsum = IMPL_MAP[discumsum_impl]
+        _attention = IMPL_MAP[attention_impl]
         
         # Establish shapes and dtypes
         assert Q.dtype == K.dtype == V.dtype, 'dtypes of inputs must match'
@@ -263,7 +257,7 @@ def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryS
             S = S.repeat_interleave(qhead_ratio, dim=2)
         D = float(compute_expanded_dim(d, deg))
         Y = _query_state(Q.contiguous(), S.contiguous(), attn_Y.contiguous(), rowmax.contiguous(), deg, D, initial_state is None)
-        if deg > 1:
+        if deg > 1: # TODO(sean) remove this when generical-p kernel is ready
             Y = post_query_state(Y, rowmax, D, initial_state is None)
 
         # Epilogue
@@ -273,9 +267,9 @@ def make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryS
     _power_full.__doc__ = POWER_FULL_DOC
     return _power_full
 
-power_full_reference = make_power_full(UpdateStateImpl.REFERENCE, QueryStateImpl.REFERENCE, DiscumsumImpl.REFERENCE, AttentionImpl.REFERENCE)
+power_full_reference = _make_power_full(UpdateStateImpl.REFERENCE, QueryStateImpl.REFERENCE, DiscumsumImpl.REFERENCE, AttentionImpl.REFERENCE)
 
-power_full = make_power_full(UpdateStateImpl.CUTLASS, QueryStateImpl.CUTLASS, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
+power_full = _make_power_full(UpdateStateImpl.CUTLASS, QueryStateImpl.CUTLASS, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
 
 ## Useful function to create sample inputs
 def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, device='cuda', gating=False,
@@ -301,7 +295,7 @@ def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, de
 
 ## TUTORIAL ##
 if __name__ == '__main__':
-    from perf._timing import report_fwd_bwd
+    from perf._inspect import print_fwd_bwd
 
     # Create inputs
     t = 1024
@@ -323,4 +317,4 @@ if __name__ == '__main__':
         # Benchmark
         print(f"Benchmarking power_full {b=} {t=} {h=} {d=} {chunk_size=} {deg=} {gating=} {dtype=}")
 
-        report_fwd_bwd(power_full, **inputs)
+        print_fwd_bwd(power_full, **inputs)

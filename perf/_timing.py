@@ -3,10 +3,6 @@ from collections.abc import Iterable
 import torch
 from perf._utils import clone_or_none, prune_non_tensors, tensors_to_ones_like
 
-x = torch.empty(int(40 * (1024 ** 2)), dtype=torch.int8, device='cuda')
-
-def flush_cache():
-    x.zero_()
 
 def get_compiled_versions(fn, inputs, warmup=3):
     """Takes a function and args and returns compiled versions for fwd, bwd, and fwd+bwd passes.
@@ -63,6 +59,10 @@ def wrap_with_timer(fn, n=10, warmup=3):
     def timed_fn(*args, **kwargs):
         for _ in range(warmup):
             fn(*args, **kwargs)
+
+        x = torch.empty(int(40 * (1024 ** 2)), dtype=torch.int8, device='cuda')
+        def flush_cache():
+            x.zero_()
 
         torch.cuda.synchronize()
         start_events = [torch.cuda.Event(enable_timing=True) for _ in range(n)]
@@ -141,10 +141,3 @@ def benchmark_speed(direction, fn, create_inputs, create_inputs_kwargs):
     else:
         raise ValueError(f"Invalid direction: {direction}")
     return time
-
-def report_fwd_bwd(fn, *args, **kwargs):
-    fwd_fn, bwd_fn, fwdbwd_fn = get_compiled_versions(fn, *args, **kwargs)
-    fwd_time = estimate_runtime(fwd_fn)
-    bwd_time = estimate_runtime(bwd_fn)
-    fwdbwd_time = estimate_runtime(fwdbwd_fn)
-    print(f"fwd_time: {fwd_time:.2f}ms, bwd_time: {bwd_time:.2f}ms, fwdbwd_time: {fwdbwd_time:.2f}ms")

@@ -95,13 +95,7 @@ def power_full_precision(direction=None, relative=False, **kw):
             gradient (Q, K, V and optionally log_G), containing the maximum absolute difference
             between test and reference gradients
     """
-    def fn_with_layernorm(fn):
-        def wrapper(**inputs):
-            o = fn(**inputs).float()
-            return (o - o.mean(-1, keepdim=True)) / o.std(-1, keepdim=True, correction=False)
-        return wrapper
-
-    error = benchmark_precision(direction, relative, fn_with_layernorm(power_full_reference), fn_with_layernorm(power_full), create_inputs, 
+    error = benchmark_precision(direction, relative, power_full_reference, power_full, create_inputs, 
                                 kw | {'dtype': torch.float32, 'chunk_size': None}, # reference is fp32 and no chunking
                                 kw)
     if direction == 'fwd':

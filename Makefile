@@ -1,48 +1,48 @@
 # Get version from pyproject.toml
 VERSION := $(shell python scripts/get_version.py)
 PACKAGE_NAME := power-attention
-# Find Python 3.11+
-PYTHON := $(shell for py in python3.12 python3.11 python3 python; do \
-    if command -v $$py >/dev/null && $$py --version 2>&1 | grep -q "Python 3.1[1-9]"; then \
-        echo $$py; \
-        break; \
-    fi \
-done)
 
-ifeq ($(PYTHON),)
-    $(error Python 3.11 or higher is required. Please install Python 3.11+)
-endif
+.PHONY: clean check-version check-test-version release release-test help deps-dev deps-benchmark deps-train kernel refresh
 
-.PHONY: dev venv deps test benchmark clean check-version check-test-version release release-test help
+PIP := pip
+PYTEST := pytest
+PYTHON := python
 
-# Allow overriding venv path through environment variable, default to .venv
-VENV_DIR ?= $(if $(POWER_ATTENTION_VENV_PATH),$(POWER_ATTENTION_VENV_PATH),.venv)
-PIP := $(VENV_DIR)/bin/pip
-PYTEST := $(VENV_DIR)/bin/pytest
-
-define get_deps
-$(VENV_DIR)/bin/python -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["dependency-groups"]["$(1)"]))'
+define install_group_deps
+	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["dependency-groups"]["$(1)"]))' | $(PIP) install -r /dev/stdin
 endef
 
-$(VENV_DIR)/.deps_venv: # Ensure venv is created and make venv is idempotent
-	@echo "Creating virtual environment using $(PYTHON) ($(shell $(PYTHON) --version 2>&1))"
-	$(PYTHON) -m venv $(VENV_DIR)
-	$(PIP) install --upgrade pip
-	touch $@
-$(VENV_DIR)/.deps_test: $(VENV_DIR)/.deps_venv
-	@$(call get_deps,test) | $(PIP) install -r /dev/stdin && touch $@
+define install_deps
+	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]))' | $(PIP) install -r /dev/stdin
+endef
 
-venv: $(VENV_DIR)/.deps_venv
-deps-test: venv $(VENV_DIR)/.deps_test
+define install_group_deps
+	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["dependency-groups"]["$(1)"]))' | $(PIP) install -r /dev/stdin
+endef
 
-# Development commands
-dev:
-	CC=gcc CXX=g++ $(PIP) install -e .[dev]
-build:
-	$(PIP) install .
-test: deps-test
-	$(PYTEST) perf/tests
+define uninstall_deps
+	$(PYTHON) -c 'import tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]; [print(dep.split(">=")[0]) for dep in deps]' | xargs -n 1 $(PIP) uninstall -y	
+endef
 
+kernel:
+	$(PYTHON) setup.py build 
+	yes | $(PIP) uninstall power_attention
+	$(PIP) install `find dist -name "power_attention-$(VERSION)*.whl"`
+
+deps-dev:
+	$(call install_group_deps,dev)
+
+deps-benchmark:
+	$(call install_group_deps,benchmark)
+
+deps-train:
+	$(call install_group_deps,benchmark)
+
+refresh:
+	@echo "Uninstalling dependencies..."
+	$(call uninstall_deps)
+	@echo "Reinstalling dependencies..."
+	$(call install_deps)
 
 # Clean and check
 clean:
@@ -82,15 +82,15 @@ plot-regressions:
 # Help
 help:
 	@echo "Available commands:"
-	@echo "  make venv          - Create virtual environment"
-	@echo "  make dev           - Build and install in editable mode"
-	@echo "  make build         - Build and install"
-	@echo "  make test          - Run tests"
-	@echo "  make benchmark     - Run benchmarks"
-	@echo "  make clean         - Clean build artifacts"
-	@echo "  make release       - Release to PyPI (includes version check)"
-	@echo "  make release-test  - Release to TestPyPI"
-	@echo "  make check-version - Check version against PyPI"
+	@echo "  make kernel             - Build kernel and install it"
+	@echo "  make refresh            - Refresh required dependencies"
+	@echo "  make deps-dev           - Install dev dependencies"
+	@echo "  make deps-train         - Install dependencies for training"
+	@echo "  make deps-benchmark     - Install dependencies for benchmark"
+	@echo "  make clean              - Clean build artifacts"
+	@echo "  make release            - Release to PyPI (includes version check)"
+	@echo "  make release-test       - Release to TestPyPI"
+	@echo "  make check-version      - Check version against PyPI"
 	@echo "  make check-test-version - Check version against TestPyPI"
-	@echo "  make plot-regressions  - Generate interactive regression visualization"
+	@echo "  make plot-regressions   - Generate interactive regression visualization"
 	@echo "Current version: $(VERSION)" 
