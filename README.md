@@ -9,11 +9,11 @@ For details on the approach, see our paper: [Symmetric Power Transformers](https
 
 Combining the recurrent form of a linear architecture and the mathematical nature of symmetric power, Power transformer demonstrates a 3-10x flops saving at the same training loss.
 
-![alt text](assets/flops.png)
+![alt text](plots/flops.png)
 
 At the current implementation, this translates to a speedup of more than 3x for degree=1, strictly faster than pytorch's implementation of flash attention for degree=2.
 
-![alt text](assets/wallclock.png)
+![alt text](plots/wallclock.png)
 
 ## Installation
 
