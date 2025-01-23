@@ -29,7 +29,7 @@ def layernorm(x, eps=None):
         eps = eps.unsqueeze(-1)
     elif eps is None:
         eps = 0.0
-    return ((o - o.mean(-1, keepdim=True)) / (o.var(-1, keepdim=True, correction=False) + eps)**0.5).to(x.dtype)
+    return ((o - o.mean(-1, keepdim=True)) / (o.std(-1, keepdim=True, correction=False) + eps)).to(x.dtype)
 
 # Credit: https://github.com/pytorch/pytorch/issues/64947#issuecomment-2304371451
 def torch_quantile(

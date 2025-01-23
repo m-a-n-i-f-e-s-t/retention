@@ -4,6 +4,7 @@ import torch
 from perf._precision import compare
 from perf._utils import clone_grads, clear_grads, same_device
 from perf._inspect import inspect_diff_details
+from perf._precision import get_violation_pct
 
 # General checks
 
@@ -156,24 +157,6 @@ def check_error_within_tolerance(test_error, *, atol: float = None, rtol: float 
             
     except TypeError:
         raise TypeError("Inputs must both be floats or both be iterables")
-
-def get_violation_pct(gold, ref, test, tol, atol=0):
-    """Calculate the violation pct of the difference between (ref-gold) and (test-gold)
-
-    Args:
-        gold: Gold tensor or iterable of tensors
-        ref: Reference tensor or iterable of tensors
-        test: Test tensor or iterable of tensors
-        tol: float. Tolerance for difference
-        atol: float. Absolute tolerance for difference
-    """
-    gold_ref_diff = torch.abs(gold - ref)
-    gold_test_diff = torch.abs(gold - test)
-    abs_error = (gold_test_diff - ((1 + tol) * gold_ref_diff + atol))
-    violations = (abs_error > 0)
-    num_violations = violations.sum().item()
-    violation_pct = num_violations / gold.numel()
-    return violation_pct
 
 # Specific checks
 
