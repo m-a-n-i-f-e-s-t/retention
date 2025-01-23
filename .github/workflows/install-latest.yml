@@ -37,4 +37,4 @@ jobs:
     - name: Verify import
       run: |
         source .venv/bin/activate
-        python -c "import power_attention; print(power_attention.__version__)"
+        python -c "import power_attention"

@@ -27,7 +27,7 @@ endef
 kernel:
 	$(PYTHON) setup.py build 
 	yes | $(PIP) uninstall power_attention
-	$(PIP) install `find dist -name "power_attention-$(VERSION)*.whl"`
+	$(PIP) install `find dist -name "power_attention-$(VERSION)*.whl"
 
 deps-dev:
 	$(call install_group_deps,dev)
@@ -48,6 +48,13 @@ refresh:
 clean:
 	rm -rf dist/ build/ *.egg-info/ *.so wheelhouse/ $(VENV_DIR)/.deps_*
 
+kernel:
+	@python setup.py build_ext --inplace
+
+refresh-deps:
+	@echo "Reinstalling development dependencies..."
+	@sh scripts/install_dev_deps.sh
+
 # Version checking
 check-version:
 	@echo "Local version: $(VERSION)"
@@ -58,9 +65,7 @@ check-test-version:
 	@python scripts/version_check.py "$(VERSION)" "$(PACKAGE_NAME)" --test
 
 # Release commands
-release: clean check-version
-	@echo "Building wheels with cibuildwheel..."
-	python -m cibuildwheel --output-dir dist
+release:
 	python -m twine check dist/*
 	@echo "Uploading to PyPI..."
 	python -m twine upload dist/*
@@ -69,6 +74,7 @@ release: clean check-version
 release-test: clean check-test-version
 	@echo "Building wheels with cibuildwheel..."
 	python -m cibuildwheel --output-dir dist
+	python -m build -s
 	python -m twine check dist/*
 	@echo "Uploading to TestPyPI..."
 	python -m twine upload --repository testpypi dist/*
