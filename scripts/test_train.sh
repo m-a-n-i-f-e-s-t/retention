@@ -17,4 +17,7 @@ else
     LOGGING_FLAG=""
 fi
 
-cd train && python train.py --batch_size=1 --block_size=32 --max_iters=100 --run_name=ci/$CURRENT_COMMIT --data_dir=/shared/datasets/ngpt_owt $LOGGING_FLAG
+cd train
+python train.py --batch_size=1 --block_size=32 --max_iters=100 --run_name=ci/sdpa/$CURRENT_COMMIT --data_dir=/shared/datasets/ngpt_owt $LOGGING_FLAG
+python train.py --attention_kernel=power --chunk_size=32 --batch_size=1 --block_size=128 --max_iters=100 --run_name=ci/power/$CURRENT_COMMIT --data_dir=/shared/datasets/ngpt_owt $LOGGING_FLAG
+python train.py --attention_kernel=power --batch_size=1 --block_size=32 --max_iters=100 --run_name=ci/power_att/$CURRENT_COMMIT --data_dir=/shared/datasets/ngpt_owt $LOGGING_FLAG
