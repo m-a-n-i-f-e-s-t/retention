@@ -49,7 +49,7 @@ clean:
 kernel:
 	@python setup.py build_ext --inplace
 
-refresh-deps:
+refresh-dev-deps:
 	@echo "Reinstalling development dependencies..."
 	@sh scripts/install_dev_deps.sh
 
