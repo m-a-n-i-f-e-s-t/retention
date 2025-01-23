@@ -4,7 +4,7 @@ import torch
 from perf._precision import compare
 from perf._utils import clone_grads, clear_grads, same_device
 from perf._inspect import inspect_diff_details
-from perf._checks import get_violation_pct
+from perf._precision import get_violation_pct
 
 # General checks
 
