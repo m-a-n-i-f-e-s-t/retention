@@ -32,17 +32,17 @@ kernel:
 deps-dev:
 	$(call install_group_deps,dev)
 
-deps-benchmark:
-	$(call install_group_deps,benchmark)
-
-deps-train:
-	$(call install_group_deps,benchmark)
-
-refresh:
+refresh-deps:
 	@echo "Uninstalling dependencies..."
 	$(call uninstall_deps)
 	@echo "Reinstalling dependencies..."
 	$(call install_deps)
+
+refresh-deps-dev:
+	@echo "Uninstalling development dependencies..."
+	$(call uninstall_dev_deps)
+	@echo "Reinstalling development dependencies..."
+	$(call install_dev_deps)
 
 # Clean and check
 clean:
@@ -50,10 +50,6 @@ clean:
 
 kernel:
 	@python setup.py build_ext --inplace
-
-refresh-deps:
-	@echo "Reinstalling development dependencies..."
-	@sh scripts/install_dev_deps.sh
 
 # Version checking
 check-version:
@@ -88,11 +84,11 @@ plot-regressions:
 # Help
 help:
 	@echo "Available commands:"
-	@echo "  make kernel             - Build kernel and install it"
-	@echo "  make refresh            - Refresh required dependencies"
+	@echo "  make kernel             - Build kernel and (re)install it"
+	@echo "  make deps-dev           - Install required dependencies"
 	@echo "  make deps-dev           - Install dev dependencies"
-	@echo "  make deps-train         - Install dependencies for training"
-	@echo "  make deps-benchmark     - Install dependencies for benchmark"
+	@echo "  make refresh-deps       - Refresh required dependencies"
+	@echo "  make refresh-deps-dev   - Refresh development dependencies"
 	@echo "  make clean              - Clean build artifacts"
 	@echo "  make release            - Release to PyPI (includes version check)"
 	@echo "  make release-test       - Release to TestPyPI"
