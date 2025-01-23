@@ -56,7 +56,8 @@ dev = [
   "pymdown-extensions",
   "mkdocs",
   "mkdocstrings-python",
-  "requests"
+  "requests",
+  "wandb"
 ]
 
 [tool.cibuildwheel]
