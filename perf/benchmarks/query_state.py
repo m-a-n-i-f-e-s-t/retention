@@ -86,6 +86,13 @@ def query_state_precision(direction=None, relative=False, **kw):
             return (o - o.mean(-1, keepdim=True)) / o.std(-1, keepdim=True, correction=False)
         return wrapper
 
+    # We wrap query_state inside a layernorm because the scale of the output for each
+    # token is different, and the scale of the first token is usually very large, which 
+    # has to do with the rowmax of the first token is usually very small, so it's scaled
+    # by exp(-rowmax), which is large. This caused the scale of numerical error to be
+    # different for each token, and thus hard to compare. The layernorm is purely here to
+    # normalize the scale of each token, without it, query_state should still match its 
+    # reference implementation.
     error = benchmark_precision(direction, relative, fn_with_layernorm(query_state_reference), fn_with_layernorm(query_state), create_inputs, 
                                 kw | {'dtype': torch.float32}, # reference is fp32
                                 kw)

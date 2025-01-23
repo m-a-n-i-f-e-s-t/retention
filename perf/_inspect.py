@@ -61,7 +61,7 @@ def inspect_diff_details(gold, ref, test, tol, atol=0, num_vals=10):
         raise TypeError(f"Expected tensor or iterable of tensors, got {type(gold)}")
 
 
-def print_fwd_bwd(fn, *args, **kwargs):
+def print_runtime(fn, *args, **kwargs):
     fwd_fn, bwd_fn, fwdbwd_fn = get_compiled_versions(fn, *args, **kwargs)
     fwd_time = estimate_runtime(fwd_fn)
     bwd_time = estimate_runtime(bwd_fn)
