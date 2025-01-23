@@ -237,4 +237,4 @@ If you use this code in your research, please cite:
 
 ## License
 
-MIT License
+Apache 2.0 (see [LICENSE](LICENSE))
