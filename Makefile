@@ -25,9 +25,7 @@ define uninstall_deps
 endef
 
 kernel:
-	$(PYTHON) setup.py build 
-	yes | $(PIP) uninstall power_attention
-	$(PIP) install `find dist -name "power_attention-$(VERSION)*.whl"
+	@python setup.py build_ext --inplace
 
 deps-dev:
 	$(call install_group_deps,dev)
