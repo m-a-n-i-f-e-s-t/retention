@@ -66,6 +66,7 @@ other_param_ranges = {
     'X_dtype': [torch.bfloat16],
     'device': ['cuda'],
     'direction': ['fwd', 'bwd'],
+    'relative': [False],
 }
 PRECISION_TEST_CASES = [
     {**shape, **dict(zip(other_param_ranges.keys(), values))}
@@ -74,11 +75,12 @@ PRECISION_TEST_CASES = [
 ]
 
 @register_benchmark(param_configs=PRECISION_TEST_CASES, groups=['precision', 'discumsum'])
-def discumsum_precision(direction=None, **kw):
+def discumsum_precision(direction=None, relative=False, **kw):
     """Measure precision of discumsum implementation compared to fp32 reference.
     
     Args:
         direction: str. One of 'fwd' or 'bwd' to measure forward pass or backward pass precision
+        relative: bool. If True, return the relative error instead of the absolute error
         **kw: Keyword arguments passed to create_inputs() to configure the test case
             
     Returns:
@@ -87,7 +89,7 @@ def discumsum_precision(direction=None, **kw):
             gradient (X and log_G), containing the maximum absolute difference between test
             and reference gradients.
     """
-    error = benchmark_precision(direction, discumsum_reference, discumsum, create_inputs, 
+    error = benchmark_precision(direction, relative, discumsum_reference, discumsum, create_inputs, 
                                 kw | {'X_dtype': torch.float32}, # reference is fp32
                                 kw)
     if direction == 'fwd':

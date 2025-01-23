@@ -32,6 +32,10 @@ BWD_TEST_CASES = [
     dict(zip(param_ranges_bwd.keys(), values))
     for values in product(*param_ranges_bwd.values())
 ]
+for kw in BWD_TEST_CASES:
+    if kw['dtype'] == torch.float16 and kw['scale'] == 1.0:
+        kw['scale'] = 1 / kw['d']**.5
+
 def id_fn(kw):
     return f"shape_{kw['b']}_{kw['t']}_{kw['h']}_{kw['d']}-" \
            f"deg_{kw['deg']}-" \
@@ -59,8 +63,6 @@ def test_attention_bwd_create_inputs(kw):
 
 @pytest.mark.parametrize("kw", BWD_TEST_CASES, ids=id_fn)
 def test_attention_bwd_output(kw):
-    if kw['dtype'] == torch.float16 and kw['scale'] == 1.0:
-        kw['scale'] = 1 / kw['d']**.5
     inputs = create_inputs_bwd(**kw)
     if kw['gating']:
         with torch.no_grad():

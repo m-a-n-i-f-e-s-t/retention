@@ -12,8 +12,7 @@ from power_attention._utils import compute_expanded_dim
 
 # Define the primary query_state entrypoint
 @torch.library.custom_op("power_attention::query_state", mutates_args=())
-def query_state(Q : torch.Tensor, S : torch.Tensor,
-                Y : Optional[torch.Tensor],
+def query_state(Q : torch.Tensor, S : torch.Tensor, Y : Optional[torch.Tensor],
                 rowmax : Optional[torch.Tensor],
                 deg : int, scale : Optional[float], zero_initial_state : bool) -> torch.Tensor:
     r"""Compute query interaction with expanded state vectors.
@@ -43,14 +42,15 @@ def query_state(Q : torch.Tensor, S : torch.Tensor,
         Y: Optional output tensor of shape `(batch_size, num_chunks, chunk_size, num_heads, head_dim)`.
            Used for output scaling when provided.
         rowmax: Optional scaling tensor of shape `(batch_size, num_chunks, chunk_size, num_heads)`.
-           Used for numerical stability when provided.
+           Used for matching the scale of the attention output and that of the query state output.
         deg: Power attention degree. Must be even for symmetric power formulation.
         scale: Optional stabilization factor. Defaults to state_dim for fp16, 1.0 otherwise.
             Helps prevent overflow in symmetric power computation.
         zero_initial_state: Whether the initial state should be treated as zero.
 
     Returns:
-        O: Output tensor of shape `(batch_size, num_chunks, chunk_size, num_heads, head_dim)`.
+        O: Output tensor of shape `(batch_size, num_chunks, chunk_size, num_heads, head_dim)`. 
+           Note that the output is normalized by the minimum of the scale and the rowmax.
 
     Note:
         - Q must be contiguous along the last dimension
@@ -118,7 +118,7 @@ def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, fused=False, 
 
 ## TUTORIAL ##
 if __name__ == '__main__':
-    from perf._timing import report_fwd_bwd
+    from perf._inspect import print_fwd_bwd
 
     # Hyperparameters
     b, n, c, h, d = (8, 8, 128, 16, 64)
@@ -128,5 +128,5 @@ if __name__ == '__main__':
 
     # Benchmark
     print(f"Benchmarking query state \n {b=} {n=} {c=} {h=} {d=} {dtype}")
-    report_fwd_bwd(query_state, *inputs)
+    print_fwd_bwd(query_state, *inputs)
 

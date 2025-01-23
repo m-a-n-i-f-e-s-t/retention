@@ -10,7 +10,7 @@ import yaml
 from pathlib import Path
 import pprint
 from perf.benchmarks import *
-from perf._registration import lookup, list_benchmarks
+from perf._registration import lookup, list_benchmarks, list_groups, get_group
 import datetime
 import subprocess
 import os
@@ -78,9 +78,27 @@ def find_and_load_report(reports_dir, commit_hash):
               type=str,
               multiple=True,
               help='Filter measurements by key=value pairs. Can be specified multiple times.')
-def main(output, benchmarks, filter):
+@click.option('--list', '-l', 
+              is_flag=True,
+              help='List all available benchmarks and groups')
+def main(output, benchmarks, filter, list):
     """Run benchmarks and save results to YAML.
     """    
+    if list:
+        click.echo("Available benchmarks:")
+        for name in sorted(list_benchmarks()):
+            benchmark = lookup(name)[0]
+            groups_str = f" (groups: {', '.join(sorted(benchmark.groups))})" if benchmark.groups else ""
+            click.echo(f"  {name}{groups_str}")
+            
+        groups = list_groups()
+        if groups:
+            click.echo("\nAvailable groups:")
+            for group in sorted(groups):
+                members = get_group(group)
+                click.echo(f"  {group}: {', '.join(b.name for b in members)}")
+        return
+
     results = {}
     file_to_be_deleted = None
     if output is None:

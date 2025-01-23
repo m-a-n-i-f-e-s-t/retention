@@ -3,6 +3,7 @@ import torch
 
 from perf._precision import compare
 from perf._utils import clone_grads, clear_grads, same_device
+from perf._inspect import inspect_diff_details
 
 # General checks
 
@@ -156,6 +157,24 @@ def check_error_within_tolerance(test_error, *, atol: float = None, rtol: float 
     except TypeError:
         raise TypeError("Inputs must both be floats or both be iterables")
 
+def get_violation_pct(gold, ref, test, tol, atol=0):
+    """Calculate the violation pct of the difference between (ref-gold) and (test-gold)
+
+    Args:
+        gold: Gold tensor or iterable of tensors
+        ref: Reference tensor or iterable of tensors
+        test: Test tensor or iterable of tensors
+        tol: float. Tolerance for difference
+        atol: float. Absolute tolerance for difference
+    """
+    gold_ref_diff = torch.abs(gold - ref)
+    gold_test_diff = torch.abs(gold - test)
+    abs_error = (gold_test_diff - ((1 + tol) * gold_ref_diff + atol))
+    violations = (abs_error > 0)
+    num_violations = violations.sum().item()
+    violation_pct = num_violations / gold.numel()
+    return violation_pct
+
 # Specific checks
 
 def check_inputs_created_determinstically(create_inputs, kwargs, rtol=None, atol=None):
@@ -239,7 +258,7 @@ def check_inputs_backwards_match(*, fn, inputs1, inputs2, atol=None, rtol=None):
     sanity_check_tensors([grads1, grads2])
     check_allclose(grads1, grads2, atol=atol, rtol=rtol)
 
-def check_fn_forwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=None, atol=None):
+def check_fn_forwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=None, atol=0.):
     """Given two functions, check that they produce the same output for the same inputs.
 
     gold_inputs are high-precision inputs, the reference function is run with these inputs
@@ -263,9 +282,14 @@ def check_fn_forwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=N
     sanity_check_tensors([gold_output, ref_output, test_output])
     ref_err = compare(gold_output, ref_output)
     test_err = compare(gold_output, test_output)
-    check_error_within_tolerance(test_err, atol=atol, rtol=rtol, ref_error=ref_err)
+    try:
+        check_error_within_tolerance(test_err, atol=atol, rtol=rtol, ref_error=ref_err)
+    except AssertionError as e:
+        violation_pct = get_violation_pct(gold_output, ref_output, test_output, tol=rtol, atol=atol)
+        msg = inspect_diff_details(gold_output, ref_output, test_output, tol=rtol, atol=atol) 
+        raise AssertionError(f"Precision failure: {e}\n{msg}\nViolation percentage: {violation_pct * 100:.2f}%")
 
-def check_fn_backwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=None, atol=None):
+def check_fn_backwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=None, atol=0.):
     """Given two functions, check that they produce the same gradients for the same inputs.
 
     gold_inputs are high-precision inputs, the reference function is run with these inputs
@@ -305,5 +329,10 @@ def check_fn_backwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=
     sanity_check_tensors([gold_grads, ref_grads, test_grads])
     ref_err = compare(gold_grads, ref_grads)
     test_err = compare(gold_grads, test_grads)
-    check_error_within_tolerance(test_err, atol=atol, rtol=rtol, ref_error=ref_err)
+    try:
+        check_error_within_tolerance(test_err, atol=atol, rtol=rtol, ref_error=ref_err)
+    except AssertionError as e:
+        violation_pct = get_violation_pct(gold_grads, ref_grads, test_grads, tol=rtol, atol=atol)
+        msg = inspect_diff_details(gold_grads, ref_grads, test_grads, tol=rtol, atol=atol)
+        raise AssertionError(f"Precision failure: {e}\n{msg}\nViolation percentage: {violation_pct * 100:.2f}%")
     torch.cuda.empty_cache()

@@ -51,8 +51,6 @@ class CausalSelfAttention(nn.Module):
         # regularization
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
-        if self.attention_kernel == 'power':
-            self.ln = LayerNorm(self.head_size, bias=config.bias)
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
@@ -99,7 +97,6 @@ class CausalSelfAttention(nn.Module):
                 deg=self.degree,
                 scale=1.0 / d**0.5,
                 chunk_size=self.chunk_size)
-            y = self.ln(y)
         else:
             msg = f'Unknown attention kernel: {self.attention_kernel}'
             raise NotImplementedError(msg)

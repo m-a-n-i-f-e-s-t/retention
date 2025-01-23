@@ -90,7 +90,7 @@ def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, device='cuda'
 
 ## TUTORIAL ##
 if __name__ == '__main__':
-    from perf._timing import report_fwd_bwd
+    from perf._inspect import print_fwd_bwd
 
     # Hyperparameters
     b, n, c, h, d = (8, 8, 128, 16, 64)
@@ -101,4 +101,4 @@ if __name__ == '__main__':
     print(f"Benchmarking chunk state \n {b=} {n=} {c=} {h=} {d=} {dtype=}")
 
     # benchmark
-    report_fwd_bwd(update_state, inputs['K'], inputs['V'], inputs['deg'])
+    print_fwd_bwd(update_state, inputs['K'], inputs['V'], inputs['deg'])

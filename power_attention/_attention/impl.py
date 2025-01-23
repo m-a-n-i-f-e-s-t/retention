@@ -45,7 +45,7 @@ def attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor,
         Tuple containing:
             - Y: Output tensor of shape `(batch_size, seq_len, num_heads, head_dim)`.
             - y: Normalization factors of shape `(batch_size, seq_len, num_heads)`.
-            - rowmax: Row-wise maximum values of shape `(batch_size, seq_len, num_heads)`.
+            - rowmax: Row-wise maximum values of shape `(batch_size, seq_len, num_heads)`, always in log space.
 
     Note:
         - Input tensors must have matching dtypes (fp16 or bf16)
@@ -136,7 +136,7 @@ def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', gati
 
 ## TUTORIAL ##
 if __name__ == '__main__':
-    from perf._timing import report_fwd_bwd
+    from perf._inspect import print_fwd_bwd
 
     # Hyperparameters
     b, t, h, d = (8, 1024, 16, 64)
@@ -162,12 +162,12 @@ if __name__ == '__main__':
 
     else:
         # benchmark 
-        report_fwd_bwd(attention, *inputs)
+        print_fwd_bwd(attention, *inputs)
 
         # Run flash attention
         Q, K, V = inputs[:3]
         from flash_attn import flash_attn_func
         print("benchmarking flash attention")
-        report_fwd_bwd(flash_attn_func, Q, K, V, dropout_p=0.0, softmax_scale=None, causal=True)
+        print_fwd_bwd(flash_attn_func, Q, K, V, dropout_p=0.0, softmax_scale=None, causal=True)
 
 

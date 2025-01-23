@@ -69,6 +69,7 @@ other_param_ranges = {
     'gating': [False, True],
     'deg': [1, 2],
     'direction': ['fwd', 'bwd'],
+    'relative': [False],
 }
 PRECISION_TEST_CASES = [
     {**shape, **dict(zip(other_param_ranges.keys(), values))}
@@ -80,11 +81,12 @@ MINI_SETTINGS = {'b': 1, 't': 512, 'h': 1, 'd': 64, 'qhead_ratio': 1, 'dtype': t
 
 @register_benchmark(param_configs=PRECISION_TEST_CASES, groups=['precision', 'power_full'])
 @register_benchmark(param_configs=[{**MINI_SETTINGS, 'direction': 'fwd'}, {**MINI_SETTINGS, 'direction': 'bwd'}], groups=['precision', 'power_full'], label='mini')
-def power_full_precision(direction=None, **kw):
+def power_full_precision(direction=None, relative=False, **kw):
     """Measure precision of power attention implementation compared to fp32 reference.
     
     Args:
         direction: str. One of 'fwd' or 'bwd' to measure forward pass or backward pass precision
+        relative: bool. If True, return the relative error instead of the absolute error
         **kw: Keyword arguments passed to create_inputs() to configure the test case
             
     Returns:
@@ -93,7 +95,7 @@ def power_full_precision(direction=None, **kw):
             gradient (Q, K, V and optionally log_G), containing the maximum absolute difference
             between test and reference gradients
     """
-    error = benchmark_precision(direction, power_full_reference, power_full, create_inputs, 
+    error = benchmark_precision(direction, relative, power_full_reference, power_full, create_inputs, 
                                 kw | {'dtype': torch.float32, 'chunk_size': None}, # reference is fp32 and no chunking
                                 kw)
     if direction == 'fwd':

@@ -54,7 +54,7 @@ class QueryStateReference(torch.autograd.Function):
         """ Scale the gradient from output to gradients for attention
         """
         b, n, c, h, d = dY.shape
-        scale_qs = torch.tensor(1, dtype=dY.dtype, device=dY.device) if scale is None else 1 / scale
+        scale_qs = torch.tensor(1, dtype=rowmax.dtype, device=rowmax.device) if scale is None else 1 / scale
         scale_attn = torch.exp(-rowmax)
         min_scale = torch.min(scale_qs, scale_attn)
         qs_factor = min_scale / scale_qs
