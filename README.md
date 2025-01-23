@@ -128,6 +128,7 @@ python3 -m perf.plot_reports
 To view the documentation locally, run:
 
 ```bash
+pip install mkdocs mkdocs-material
 .venv/bin/mkdocs serve -a 0.0.0.0:8000
 ```
 

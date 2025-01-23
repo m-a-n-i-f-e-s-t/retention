@@ -172,7 +172,7 @@ output_p4 = power_attention(q, k, v, degree=4)
 The gating mechanism modulates the contribution of each position through a multiplicative factor:
 
 $$
-Y_i = \sum_{j=1}^i A_{ij} V_j G_j
+Y_i = \sum_{j=1}^i A_{ij} V_j G_{ij}
 $$
 
 <div class="admonition tip">

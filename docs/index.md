@@ -24,6 +24,20 @@ $$
 Y_{i} = \frac{S_i \phi(Q_i)}{Z_i \phi(Q_i)} \qquad Z_i = Z_{i-1} + \phi(K_i)^T \qquad S_i = S_{i-1} + V_i \phi(K_i)^T
 $$
 
+In practice, the normalization above can be replaced by a layernorm layer without sacrificing any performance, so this package implements the following mathematical operation:
+
+$$
+Y_i = \text{Norm}(\sum_{j=1}^{i}\phi(Q_i)^T \phi(K_j)V_j) 
+$$
+
+with the corresponding recurrent computation:
+
+$$
+Y_i = \text{Norm}(S_i \phi(Q_i)) \qquad S_i = S_{i-1} + V_i \phi(K_i)^T
+$$
+
+where $\text{Norm}$ denotes a layernorm layer (Ba, Kiros, and Hinton 2016).
+
 For a detailed derivation of the symmetric power embedding $\phi$ and its properties, please refer to the [mathematical background](https://manifestai.com/articles/symmetric-power-transformers/#4-1-mathematical-background) section in the paper.
 
 ## Key Features
