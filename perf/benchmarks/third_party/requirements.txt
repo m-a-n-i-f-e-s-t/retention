@@ -1,0 +1,2 @@
+git+https://github.com/fla-org/flash-linear-attention@0c29cd11b3272f10a29431868abdc1384e16f47a
+flash_attn==2.7.3
