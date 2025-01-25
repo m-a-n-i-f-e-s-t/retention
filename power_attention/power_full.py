@@ -199,9 +199,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
             log_G_accum = log_G.cumsum(1) if log_G is not None else None
             Y, _, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
             assert Y.is_contiguous(), 'Y must be contiguous'
-            rowmax = rowmax - math.log(scale)
-            out = layernorm(Y, eps=torch.exp(-rowmax)*1e-5)
-            return out
+            return Y
 
         # Reshape into chunks
         Q = Q.view(b, n, c, hq, d)
