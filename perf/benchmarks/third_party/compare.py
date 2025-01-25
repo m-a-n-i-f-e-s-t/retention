@@ -61,7 +61,7 @@ except BaseException:
 configs = [
     triton.testing.Benchmark(
         x_names=["ctx"],
-        x_vals=[2**i for i in range(10, 16)],
+        x_vals=[2**i for i in range(10, 18)],
         line_arg="provider",
         line_vals=providers,
         line_names=[provider.upper() for provider in providers],
@@ -198,8 +198,8 @@ def bench_compare(ctx, batch, head_q, head_k, head_dim, mode, dtype, device, gat
     else:
         fn = fn
 
-    ms = triton.testing.do_bench(fn)
-    flops = calculate_flops(ctx, batch, head_q, head_k, head_dim, mode, dtype, device, gating, causal, provider)
+    ms = triton.testing.do_bench(fn) if measure != "flops" else None
+    flops = calculate_flops(ctx, batch, head_q, head_k, head_dim, mode, dtype, device, gating, causal, provider) if measure != "time" else None
     if measure == "throughput":
         return flops * 1e-12 / (ms * 1e-3)
     elif measure == "time":
