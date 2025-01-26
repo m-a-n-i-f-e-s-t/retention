@@ -57,7 +57,9 @@ dev = [
   "mkdocstrings-python",
   "requests",
   "wandb",
-  "zarr"
+  "zarr",
+  "psutil",
+  "bokeh",
 ]
 
 [tool.cibuildwheel]
