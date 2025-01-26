@@ -18,6 +18,7 @@ def attention_reference(q, k, v, deg, log_g=None, r=1, w=1, causal=True, head_fi
             assert log_g.shape == (b, h, ctx)
         else:
             assert log_g.shape == (b, ctx, h)
+            log_g = log_g.transpose(1, 2) # (b, h, ctx)
     if head_first:
         q = q.view(b, h, ctx * r, d)
         k = k.view(b, h, ctx * w, d)
@@ -40,7 +41,10 @@ def attention_reference(q, k, v, deg, log_g=None, r=1, w=1, causal=True, head_fi
     if norm:
         o = o - (o.sum(dim=-1, keepdim=True) / d)
         o = o / torch.sqrt(o.sum(dim=-1, keepdim=True)**2 + 1e-7)
-    return o, rowmax
+    if not head_first:
+        o = o.transpose(1, 2)
+        rowmax = rowmax.transpose(1, 2)
+    return o, rowmax.squeeze(-1)
 
 
 fwd_configs = [
@@ -453,6 +457,10 @@ class _power_attention(torch.autograd.Function):
             causal: bool
             head_first: bool
             norm: bool
+
+            Returns:
+                o: (B, H_Q // R, CTX, E) if head_first else (B, CTX, H_Q // R, E)
+                rowmax: (B, H_Q // R, CTX) if head_first else (B, CTX, H_Q // R)
         """
         if head_first:
             b, hq, t, d, hk, e = *q.shape, k.shape[1], v.shape[-1]

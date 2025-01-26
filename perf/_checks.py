@@ -262,6 +262,7 @@ def check_fn_forwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=N
         gold_output = ref_fn(**gold_inputs)
         ref_output = ref_fn(**ref_inputs)
         test_output = test_fn(**test_inputs)
+    import pdb; pdb.set_trace()
     sanity_check_tensors([gold_output, ref_output, test_output])
     ref_err = compare(gold_output, ref_output)
     test_err = compare(gold_output, test_output)
