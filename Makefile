@@ -4,12 +4,12 @@ PACKAGE_NAME := power-attention
 
 .PHONY: clean check-version check-test-version release release-test help deps-dev kernel refresh-deps refresh-deps-dev
 
-PIP := pip
-PYTEST := pytest
+PIP := python -m pip
+PYTEST := python -m pytest
 PYTHON := python
 
 define install_group_deps
-	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["$(1)"]))' | $(PIP) install -r /dev/stdin
+	$(PYTHON) -c 'import tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["$(1)"]; [print(dep.split( "@ ")[-1] if " @ " in dep else dep) for dep in deps]' | $(PIP) install -r /dev/stdin
 endef
 
 define install_deps

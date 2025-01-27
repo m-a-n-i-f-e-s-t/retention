@@ -5,6 +5,16 @@ A PyTorch extension implementing symmetric power transformers - a variant of lin
 
 For details on the approach, see our paper: [Symmetric Power Transformers](https://manifestai.com/articles/symmetric-power-transformers/)
 
+## Performance
+
+Combining the recurrent form of a linear architecture and the mathematical nature of symmetric power, Power transformer demonstrates a 3-10x flops saving at the same training loss.
+
+![alt text](plots/flops.png)
+
+At the current implementation, this translates to a speedup of more than 3x for degree=1, strictly faster than pytorch's implementation of flash attention for degree=2.
+
+![alt text](plots/wallclock.png)
+
 ## Installation
 
 ### From PyPI (Recommended)

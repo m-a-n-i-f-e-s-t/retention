@@ -26,7 +26,8 @@ jobs:
     - name: Install package with dev dependencies
       run: |
         source .venv/bin/activate
-        pip install -e .[dev]
+        make refresh-deps
+        python -m pip install -e .[dev]
 
     - name: Run tests
       run: |
