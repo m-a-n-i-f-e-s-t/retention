@@ -4,7 +4,7 @@ import torch
 from perf._utils import clone_or_none, prune_non_tensors, tensors_to_ones_like
 
 
-def get_compiled_versions(fn, inputs, warmup=3):
+def get_compiled_version(fn, inputs, direction, warmup=3):
     """Takes a function and args and returns compiled versions for fwd, bwd, and fwd+bwd passes.
 
     Args:
@@ -29,16 +29,17 @@ def get_compiled_versions(fn, inputs, warmup=3):
         outputs = fn(**inputs)
         torch.autograd.backward(outputs, grad_tensors=grads)
     # Compile functions
-    compiled_fwd = torch.compile(fwd, dynamic=False)
-    compiled_bwd = torch.compile(bwd, dynamic=False)
-    compiled_fwd_bwd = torch.compile(fwd_bwd, dynamic=False)
+    if direction == 'fwd':
+        compiled_fn = torch.compile(fwd, dynamic=False)
+    elif direction == 'bwd':
+        compiled_fn = torch.compile(bwd, dynamic=False)
+    elif direction == 'fwd+bwd':
+        compiled_fn = torch.compile(fwd_bwd, dynamic=False)
     # Warmup passes
     for _ in range(warmup):
-        compiled_fwd()
-        compiled_bwd()
-        compiled_fwd_bwd()
+        compiled_fn()
     # Return compiled functions
-    return (compiled_fwd, compiled_bwd, compiled_fwd_bwd)
+    return compiled_fn
 
 
 
@@ -89,35 +90,8 @@ def estimate_runtime(fn, *args, num1=10, num2=50, **kwargs):
 
     return (t2 - t1) / (num2 - num1)
 
-def get_timing_functions(fn, inputs, num1=10, num2=30, warmup=3):
-    """Returns three functions that estimate timings for forward, backward and forward+backward passes.
 
-    Args:
-        fn: Function to time
-        inputs: A dict, keyword arguments to pass to fn
-        num1: First number of iterations for timing estimate
-        num2: Second number of iterations for timing estimate
-        warmup: Number of warmup iterations
-
-    Returns:
-        Tuple of (fwd_timing_fn, bwd_timing_fn, fwd_bwd_timing_fn) that each return estimated ms per iteration
-    """
-    # Get compiled versions
-    fwd, bwd, fwd_bwd = get_compiled_versions(fn, inputs, warmup=warmup)
-
-    # Create timing functions that return estimates
-    def get_fwd_time():
-        return estimate_runtime(fwd, num1=num1, num2=num2)
-
-    def get_bwd_time():
-        return estimate_runtime(bwd, num1=num1, num2=num2)
-
-    def get_fwd_bwd_time():
-        return estimate_runtime(fwd_bwd, num1=num1, num2=num2)
-
-    return get_fwd_time, get_bwd_time, get_fwd_bwd_time
-
-def benchmark_speed(direction, fn, create_inputs, create_inputs_kwargs):
+def benchmark_speed(direction, fn, create_inputs, create_inputs_kwargs, num1=10, num2=30, warmup=3):
     """Measure speed of a function implementation.
     
     Args:
@@ -131,13 +105,5 @@ def benchmark_speed(direction, fn, create_inputs, create_inputs_kwargs):
         float: Time in milliseconds per iteration
     """
     inputs = create_inputs(**create_inputs_kwargs, requires_grad=True)
-    fwd_timing_fn, bwd_timing_fn, fwd_bwd_timing_fn = get_timing_functions(fn, inputs)
-    if direction == 'fwd':
-        time = fwd_timing_fn()
-    elif direction == 'bwd':
-        time = bwd_timing_fn()
-    elif direction == 'fwd+bwd':
-        time = fwd_bwd_timing_fn()
-    else:
-        raise ValueError(f"Invalid direction: {direction}")
-    return time
+    fn = get_compiled_version(fn, inputs, direction=direction, warmup=warmup)
+    return estimate_runtime(fn, num1=num1, num2=num2)
