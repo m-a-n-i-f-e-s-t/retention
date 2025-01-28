@@ -5,7 +5,8 @@ description = "Kernels for symmetric-power-based linear transformers"
 authors = [
   { name = "Sean Zhang", email = "sean@manifest.com" },
   { name = "Carles Gelada", email = "cgel@manifest.com" },
-  { name = "Jacob Buckman", email = "jacob@manifest.com" }
+  { name = "Jacob Buckman", email = "jacob@manifest.com" },
+  { name = "Txus Bach", email = "txus@manifest.com" }
 ]
 classifiers = [
   "Programming Language :: Python :: 3",

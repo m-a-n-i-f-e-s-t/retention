@@ -7,7 +7,6 @@ from perf._timing import benchmark_speed
 # TODO(sean): enable this when ready
 # from power_attention._attention.impl_triton2 import attention as triton_power_attention, create_inputs as create_inputs_triton_power
 from power_attention.power_full import power_full, create_inputs as create_inputs_power
-from power_attention._utils import compute_expanded_dim
 from fla.ops.linear_attn import chunk_linear_attn, fused_chunk_linear_attn
 
 torch._dynamo.config.cache_size_limit = 128 # Increased from a default of 8 to prevent warnings
@@ -15,6 +14,17 @@ torch._dynamo.config.cache_size_limit = 128 # Increased from a default of 8 to p
 FWD, BWD, FWD_BWD = "fwd", "bwd", "fwd+bwd"
 SDPA, POWER, TRITON_POWER, FLA, FLASH = "sdpa", "power", "triton_power", "fla", "flash"
 USE_TRITON_BENCH = os.environ.get("USE_TRITON_BENCH", "0") == "1"
+
+def compute_expanded_dim(head_dim, deg):
+    if deg == 1:
+        return head_dim
+    elif deg == 2:
+        if head_dim == 64:
+            return math.comb(deg + head_dim - 1, deg)
+        else:
+            raise ValueError(f"Unsupported head dimension: {head_dim}")
+    else:
+        raise ValueError(f"Unsupported degree: {deg}")
 
 def estimate_flops(ctx, batch, head_q, head_k, head_dim, direction, dtype, device, causal, algo, deg=None, chunk_size=None, gating=False, **kw):
     """ calculate theoretical flops
@@ -141,10 +151,10 @@ if __name__ == "__main__":
         else:
             print(rowstr)
 
-    print_rowstr("ctx,sdpa,fla,fla_fused,p1_att,p2_att,p1_chunk,p2_chunk")
-    for ctx in [2**i for i in range(10, 16)]:
+    print_rowstr("ctx,sdpa,p1_att,p2_att,p1_chunk,p2_chunk")
+    for ctx in [2**i for i in range(10, 17)]:
         rowstr = f"{ctx},"
-        for provider in [SDPA, (FLA, False), (FLA, True), (POWER, 1, None), (POWER, 2, None), (POWER, 1, 128), (POWER, 2, 1024)]:
+        for provider in [SDPA, (POWER, 1, None), (POWER, 2, None), (POWER, 1, 128), (POWER, 2, 1024)]:
             if provider == SDPA:
                 create_inputs = create_inputs_sdpa
                 algo = SDPA
@@ -192,7 +202,7 @@ if __name__ == "__main__":
                 rowstr += ","
             else:
                 kw = {
-                    'b': 2**15//ctx,
+                    'b': 2**16//ctx,
                     't': ctx,
                     'h': 12,
                     'd': 64,
