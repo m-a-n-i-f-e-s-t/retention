@@ -1,6 +1,7 @@
 import torch
 import triton
 import math
+import os
 from perf._timing import benchmark_speed
 
 # TODO(sean): enable this when ready
@@ -13,8 +14,9 @@ torch._dynamo.config.cache_size_limit = 128 # Increased from a default of 8 to p
 
 FWD, BWD, FWD_BWD = "fwd", "bwd", "fwd+bwd"
 SDPA, POWER, TRITON_POWER, FLA, FLASH = "sdpa", "power", "triton_power", "fla", "flash"
+USE_TRITON_BENCH = os.environ.get("USE_TRITON_BENCH", "0") == "1"
 
-def estimate_flops(ctx, batch, head_q, head_k, head_dim, direction, dtype, device, causal, algo, deg=None, chunk_size=None, gating=False):
+def estimate_flops(ctx, batch, head_q, head_k, head_dim, direction, dtype, device, causal, algo, deg=None, chunk_size=None, gating=False, **kw):
     """ calculate theoretical flops
 
     Returns:
@@ -130,6 +132,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--measure", type=str, default="time", choices=["time", "flops", "throughput"])
     parser.add_argument("--csv", action="store_true", help="Print results in CSV format")
+    parser.add_argument("--mode", type=str, default="fwd", choices=["fwd", "bwd", "fwd+bwd"])
     args = parser.parse_args()
 
     def print_rowstr(rowstr):
@@ -139,7 +142,7 @@ if __name__ == "__main__":
             print(rowstr)
 
     print_rowstr("ctx,sdpa,fla,fla_fused,p1_att,p2_att,p1_chunk,p2_chunk")
-    for ctx in [2**i for i in range(10, 17)]:
+    for ctx in [2**i for i in range(10, 16)]:
         rowstr = f"{ctx},"
         for provider in [SDPA, (FLA, False), (FLA, True), (POWER, 1, None), (POWER, 2, None), (POWER, 1, 128), (POWER, 2, 1024)]:
             if provider == SDPA:
@@ -162,13 +165,6 @@ if __name__ == "__main__":
                     'head_first': False,
                     'normalize': True,
                 }
-            # elif provider[0] == TRITON_POWER:
-            #     create_inputs = create_inputs_triton_power
-            #     fn = triton_power_attention
-            #     algo, deg = provider
-            #     algo_kw = {
-            #         'deg': deg
-            #     }
             else:
                 create_inputs = create_inputs_power
                 algo, deg, chunk_size = provider
@@ -178,12 +174,25 @@ if __name__ == "__main__":
                     'chunk_size': chunk_size,
                     'gating': True,
                 }
+
+            def measure_time():
+                if USE_TRITON_BENCH:
+                    compiled_fn = torch.compile(fn, dynamic=False) if (FLA not in provider) else fn
+                    inputs = create_inputs(**kw)
+                    time = triton.testing.do_bench(lambda: compiled_fn(**inputs), warmup=2, rep=10)
+                else:
+                    time = benchmark_speed(args.mode, fn, create_inputs, kw, compile=(FLA not in provider), num1=2, num2=8, warmup=2)
+                return time
             
+            def measure_flops():
+                flops = estimate_flops(ctx=kw["t"], batch=kw["b"], head_q=kw["h"] * kw["qhead_ratio"], head_k=kw["h"], head_dim=kw["d"], direction=args.mode, dtype=kw["dtype"], device=kw["device"], causal=True, algo=algo, **algo_kw)
+                return flops
+
             if algo == POWER and chunk_size is not None and ctx < chunk_size * 4:
                 rowstr += ","
             else:
                 kw = {
-                    'b': 2,
+                    'b': 2**15//ctx,
                     't': ctx,
                     'h': 12,
                     'd': 64,
@@ -192,14 +201,14 @@ if __name__ == "__main__":
                     'qhead_ratio': 1,
                 } | algo_kw
                 if args.measure == "time":  
-                    time = benchmark_speed(FWD_BWD, fn, create_inputs, kw, compile=(FLA not in provider))
+                    time = measure_time()
                     rowstr += f"{time:.6f},"
                 elif args.measure == "flops":
-                    flops = estimate_flops(ctx=kw["t"], batch=kw["b"], head_q=kw["h"] * kw["qhead_ratio"], head_k=kw["h"], head_dim=kw["d"], direction=FWD_BWD, dtype=kw["dtype"], device=kw["device"], causal=True, algo=algo, **algo_kw)
+                    flops = measure_flops()
                     rowstr += f"{flops:.3e},"
                 elif args.measure == "throughput":
-                    time = benchmark_speed(FWD_BWD, fn, create_inputs, kw, compile=(FLA not in provider))
-                    flops = estimate_flops(ctx=kw["t"], batch=kw["b"], head_q=kw["h"] * kw["qhead_ratio"], head_k=kw["h"], head_dim=kw["d"], direction=FWD_BWD, dtype=kw["dtype"], device=kw["device"], causal=True, algo=algo, **algo_kw)
+                    time = measure_time()
+                    flops = measure_flops()
                     throughput = flops * 1e-12 / (time * 1e-3)
                     rowstr += f"{throughput:.3e},"
         print_rowstr(rowstr[:-1])

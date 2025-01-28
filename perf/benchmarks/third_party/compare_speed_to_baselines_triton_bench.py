@@ -1,25 +1,21 @@
 import torch
 import triton
-import math
 from itertools import product
-from perf._benchmark import Measurement
-from perf._registration import register_benchmark
-from perf._timing import benchmark_speed
-from perf._utils import describe_gpu
 
 from power_attention.power_full import power_full
 # from power_attention._attention.impl_triton2 import attention as jacob_attention
 from power_attention._utils import compute_expanded_dim
+
+torch._dynamo.config.cache_size_limit = 128 # Increased from a default of 8 to prevent warnings
 
 providers = ["sdpa"]
 params = {
     "dtype": [torch.bfloat16],
     "device": ["cuda"],
     "gating": [True],
-    "chunk_size": [128, None],
     "deg": [1, 2],
-    "direction": ["fwd", "bwd"], # can also do `fwd+bwd`
-    "b": [6],
+    "direction": ["fwd+bwd"], # can also do `fwd+bwd`
+    "b": [2],
     "hq": [12],
     "hk": [12],
     "d": [64],
@@ -28,7 +24,7 @@ params = {
 colors = {
     "sdpa": "black",
     "power-p1-chunk128": "#E6B3FF",  # light purple
-    "power-p2-chunk128": "#9933FF",  # darker purple
+    "power-p2-chunk1024": "#9933FF",  # darker purple
     "power-p1": "#FFB366",  # light orange
     "power-p2": "#FF8000",  # dark orange
     "tritonpower-p1": "#B3FFB3",  # light green
@@ -41,19 +37,6 @@ colors = {
     "rebased": "#00FF00"  # green
 }
 
-for deg, chunk_size in product(params['deg'], params['chunk_size']):
-    if chunk_size is None:
-        providers.append(f"power-p{deg}")
-        # providers.append(f"tritonpower-p{deg}")
-    else:
-        providers.append(f"power-p{deg}-chunk{chunk_size}")
-
-try:
-    from flash_attn.flash_attn_interface import flash_attn_func
-    providers.append("flash")
-except BaseException:
-    pass
-
 try:
     from fla.ops.linear_attn import chunk_linear_attn, fused_chunk_linear_attn
     # TODO: add rwkv for comparison
@@ -65,29 +48,14 @@ except BaseException:
     pass
 
 
-configs = [
-    triton.testing.Benchmark(
-        x_names=["ctx"],
-        x_vals=[2**i for i in range(10, 16)],
-        line_arg="provider",
-        line_vals=providers,
-        line_names=[provider.upper() for provider in providers],
-        styles=[(colors[provider], "-") for provider in providers],
-        ylabel="TFLOPS",
-        plot_name=f"power-attention-compare-headQ{head_q}-headK{head_k}-d{head_dim}{'-gating' if gating else ''}{'-causal' if causal else ''}-{mode}",
-        args={
-            "head_q": head_q,
-            "head_k": head_k,
-            "head_dim": head_dim,
-            "mode": mode,
-            "dtype": dtype,
-            "device": device,
-            "gating": gating,
-            "causal": causal
-        }
-    )
-    for head_q, head_k, head_dim, mode, dtype, device, gating, causal in product(params['hq'], params['hk'], params['d'], params['direction'], params['dtype'], params['device'], params['gating'], params['causal'])
-]
+providers += ["power-p1", "power-p2", "power-p1-chunk128", "power-p2-chunk1024"]
+
+try:
+    from flash_attn.flash_attn_interface import flash_attn_func
+    providers.append("flash")
+except BaseException:
+    pass
+
 
 
 def calculate_flops(ctx, batch, head_q, head_k, head_dim, mode, dtype, device, gating, causal, provider):
@@ -147,9 +115,8 @@ def calculate_flops(ctx, batch, head_q, head_k, head_dim, mode, dtype, device, g
         raise ValueError(f"Unknown provider: {provider}")
 
 
-@triton.testing.perf_report(configs)
-def bench_compare(ctx, head_q, head_k, head_dim, mode, dtype, device, gating, causal, provider, measure):
-    batch = 2**16//ctx
+def _bench_compare(ctx, head_q, head_k, head_dim, mode, dtype, device, gating, causal, provider, measure):
+    batch = 2**15//ctx
     assert head_q % head_k == 0, "head_q must be divisible by head_k"
     q = torch.randn((batch, ctx, head_q, head_dim), device=device, dtype=dtype, requires_grad=("bwd" in mode))
     k = torch.randn((batch, ctx, head_k, head_dim), device=device, dtype=dtype, requires_grad=("bwd" in mode))
@@ -158,18 +125,20 @@ def bench_compare(ctx, head_q, head_k, head_dim, mode, dtype, device, gating, ca
     if "power" in provider:
         deg = int(provider.split("-")[1][1:])
         chunk_size = int(provider.split("-")[2][5:]) if len(provider.split("-")) > 2 else None
-        if gating:
-            log_g = torch.randn((batch, ctx, head_q), device=device, dtype=torch.float32)
+
+        if chunk_size is None or ctx % (4*chunk_size) == 0:
+            if gating:
+                log_g = torch.randn((batch, ctx, head_q), device=device, dtype=torch.float32)
+            else:
+                log_g = None
+            compiled_fn = torch.compile(power_full, dynamic=False)
+            
+            def run_power():
+                return compiled_fn(q, k, v, log_G=log_g, deg=deg, scale=1.0 / head_dim**0.5, chunk_size=chunk_size)
+            run_power()
+            fn = run_power
         else:
-            log_g = None
-        # if "triton" not in provider:
-        def run_power():
-            return torch.compile(power_full)(q, k, v, log_G=log_g, deg=deg, scale=1.0 / head_dim**0.5, chunk_size=chunk_size)
-        fn = run_power
-        # else:
-        #     def run_power():
-        #         return jacob_attention(q, k, v, log_g, 1, 1, causal, 1.0)
-        #     fn = run_power
+            fn = lambda: None
     elif "flash" in provider:
         def run_flash():
             return torch.compile(flash_attn_func)(q, k, v, causal=causal, softmax_scale=1.0 / head_dim**0.5)
@@ -204,24 +173,27 @@ def bench_compare(ctx, head_q, head_k, head_dim, mode, dtype, device, gating, ca
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
-    if mode == "bwd":
-        o = fn()
-        do = torch.randn_like(o)
-        fn = lambda: o.backward(do, retain_graph=True)
-    elif mode == "fwd+bwd":
-        fwd_fn = fn
-        def fwd_bwd():
-            o = fwd_fn()
+    if "power" not in provider or chunk_size is None or ctx % (4*chunk_size) == 0:
+        if mode == "bwd":
+            o = fn()
             do = torch.randn_like(o)
-            return o.backward(do, retain_graph=True)
-        fn = fwd_bwd
+            fn = lambda: o.backward(do, retain_graph=True)
+        elif mode == "fwd+bwd":
+            fwd_fn = fn
+            def fwd_bwd():
+                o = fwd_fn()
+                do = torch.randn_like(o)
+                return o.backward(do, retain_graph=True)
+            fn = fwd_bwd
+        else:
+            fn = fn
+        ms = triton.testing.do_bench(fn, warmup=2, rep=10) if measure != "flops" else None
     else:
-        fn = fn
+        ms = 0
 
-    ms = triton.testing.do_bench(fn) if measure != "flops" else None
     flops = calculate_flops(ctx, batch, head_q, head_k, head_dim, mode, dtype, device, gating, causal, provider) if measure != "time" else None
     if measure == "throughput":
-        return flops * 1e-12 / (ms * 1e-3)
+        return flops * 1e-12 / (ms * 1e-3) if ms > 0 else 0
     elif measure == "time":
         return ms
     elif measure == "flops":
@@ -234,4 +206,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--measure", type=str, default="throughput", choices=["throughput", "time", "flops"])
     args = parser.parse_args()
+
+    configs = [
+        triton.testing.Benchmark(
+            x_names=["ctx"],
+            x_vals=[2**i for i in range(10, 16)],
+            line_arg="provider",
+            line_vals=providers,
+            line_names=[provider.upper() for provider in providers],
+            styles=[(colors[provider], "-") for provider in providers],
+            ylabel="TFLOPS" if args.measure == "throughput" else "ms" if args.measure == "time" else "TFLOPs",
+            plot_name=f"power-attention-compare-{args.measure}-headQ{head_q}-headK{head_k}-d{head_dim}{'-gating' if gating else ''}{'-causal' if causal else ''}-{mode}",
+            args={
+                "head_q": head_q,
+                "head_k": head_k,
+                "head_dim": head_dim,
+                "mode": mode,
+                "dtype": dtype,
+                "device": device,
+                "gating": gating,
+                "causal": causal
+            }
+        )
+        for head_q, head_k, head_dim, mode, dtype, device, gating, causal in product(params['hq'], params['hk'], params['d'], params['direction'], params['dtype'], params['device'], params['gating'], params['causal'])
+    ]
+    bench_compare = triton.testing.perf_report(configs)(_bench_compare)
     bench_compare.run(save_path=".", print_data=True, measure=args.measure)

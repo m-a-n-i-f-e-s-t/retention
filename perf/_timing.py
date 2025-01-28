@@ -58,14 +58,14 @@ def check_tensors_unchanged(tensor1, tensor2, prefix=''):
 def wrap_with_timer(fn, n=10, warmup=3):
     """Takes a function and returns a function that calls it n times and returns the total time."""
     def timed_fn(*args, **kwargs):
+        torch.cuda.synchronize()
         for _ in range(warmup):
             fn(*args, **kwargs)
 
-        x = torch.empty(int(40 * (1024 ** 2)), dtype=torch.int8, device='cuda')
+        cache = torch.empty(int(256e6), dtype=torch.int8, device='cuda')
         def flush_cache():
-            x.zero_()
+            cache.zero_()
 
-        torch.cuda.synchronize()
         start_events = [torch.cuda.Event(enable_timing=True) for _ in range(n)]
         end_events = [torch.cuda.Event(enable_timing=True) for _ in range(n)]
         for i in range(n):
@@ -90,33 +90,6 @@ def estimate_runtime(fn, *args, num1=10, num2=50, **kwargs):
 
     return (t2 - t1) / (num2 - num1)
 
-def get_timing_functions(fn, inputs, num1=10, num2=30, warmup=3, compile=True):
-    """Returns three functions that estimate timings for forward, backward and forward+backward passes.
-
-    Args:
-        fn: Function to time
-        inputs: A dict, keyword arguments to pass to fn
-        num1: First number of iterations for timing estimate
-        num2: Second number of iterations for timing estimate
-        warmup: Number of warmup iterations
-
-    Returns:
-        Tuple of (fwd_timing_fn, bwd_timing_fn, fwd_bwd_timing_fn) that each return estimated ms per iteration
-    """
-    # Get compiled versions
-    fwd, bwd, fwd_bwd = get_compiled_versions(fn, inputs, warmup=warmup, compile=compile)
-
-    # Create timing functions that return estimates
-    def get_fwd_time():
-        return estimate_runtime(fwd, num1=num1, num2=num2)
-
-    def get_bwd_time():
-        return estimate_runtime(bwd, num1=num1, num2=num2)
-
-    def get_fwd_bwd_time():
-        return estimate_runtime(fwd_bwd, num1=num1, num2=num2)
-
-    return get_fwd_time, get_bwd_time, get_fwd_bwd_time
 
 def benchmark_speed(direction, fn, create_inputs, create_inputs_kwargs, num1=10, num2=30, warmup=3, compile=True):
     """Measure speed of a function implementation.
