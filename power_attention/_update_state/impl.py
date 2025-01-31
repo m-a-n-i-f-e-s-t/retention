@@ -93,7 +93,7 @@ if __name__ == '__main__':
     from perf._timing import benchmark_speed
 
     # Hyperparameters
-    kw = dict(b=8, n=8, c=128, h=16, d=64, dtype=torch.float16, device='cuda')
+    kw = dict(b=8, n=8, c=256, h=16, d=64, dtype=torch.bfloat16, device='cuda')
     
     print(f"Benchmarking chunk state \n {kw=}")
 

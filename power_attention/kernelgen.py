@@ -5,20 +5,126 @@ import hashlib
 from collections import defaultdict
 from jinja2 import Template, Environment, meta
 from pathlib import Path
+from itertools import product
+
+def parse_val(s):
+    """Try to parse a value from a string into appropriate Python types.
+    
+    Supports:
+    - int (e.g. '42', '-17')
+    - float (e.g. '3.14', '-0.001', '1e-10')
+    - bool ('True', 'False', 'true', 'false')
+    - tuple (e.g. '(1, 2, 3)', '()')
+    - list (e.g. '[1, 2, 3]', '[]')
+    - str (default fallback)
+    
+    Args:
+        s: Input string to parse
+        
+    Returns:
+        Parsed value as int, float, bool, tuple, list, or str
+    """
+    # Handle None/empty cases
+    if s is None or s.strip() == '':
+        return None
+        
+    # Clean the input
+    s = s.strip()
+    
+    # Try boolean first (to avoid 'True' being parsed as a string)
+    lower_s = s.lower()
+    if lower_s in ('true', 'false'):
+        return lower_s == 'true'
+    
+    # Try tuple
+    if s.startswith('(') and s.endswith(')'):
+        if s == '()':  # Handle empty tuple
+            return tuple()
+        try:
+            # Remove parentheses and split by comma, handling empty last element
+            items = [parse_val(item.strip()) for item in s[1:-1].split(',') if item.strip()]
+            return tuple(items)
+        except ValueError:
+            pass
+    
+    # Try list
+    if s.startswith('[') and s.endswith(']'):
+        if s == '[]':  # Handle empty list
+            return list()
+        try:
+            # Remove brackets and split by comma, handling empty last element
+            items = [parse_val(item.strip()) for item in s[1:-1].split(',') if item.strip()]
+            return items
+        except ValueError:
+            pass
+    
+    # Try integer
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    
+    # Try float
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    
+    # Return as string if all else fails
+    return s
+
+def extract_constval_from_lines(line):
+    """Extract constval from line of `var=(val1, val2, ...),...` into a dict[str, list]"""
+    # Split by comma, but not within parentheses/brackets
+    def split_outside_brackets(s):
+        parts = []
+        current = []
+        bracket_count = 0
+        
+        for char in s:
+            if char in '([':
+                bracket_count += 1
+            elif char in ')]':
+                bracket_count -= 1
+            elif char == ',' and bracket_count == 0:
+                parts.append(''.join(current))
+                current = []
+                continue
+            current.append(char)
+        
+        if current:
+            parts.append(''.join(current))
+        return parts
+
+    pairs = split_outside_brackets(line)
+    result = {}
+    for pair in pairs:
+        if '=' not in pair:
+            continue
+        key, value = pair.split('=', 1)
+        result[key.strip()] = parse_val(value.strip())
+    return result
 
 def extract_template_from_docstring(func):
     """Extract template code from function docstring between <kernelgen> tags"""
     docstring = func.__doc__ or ""
-    match = re.search(r'<kernelgen>(.*?)</kernelgen>', docstring, re.DOTALL)
-    # import pdb; pdb.set_trace()
-    if match:
-        template_str = match.group(1)
-        print(f"\nExtracted template from {func.__name__}:")
-        print("=" * 80)
-        print(template_str)
-        print("=" * 80)
-        return template_str
-    return None
+    match_with_constval = re.search(r'<kernelgen (.*?)>(.*?)</kernelgen>', docstring, re.DOTALL)
+    match_without_constval = re.search(r'<kernelgen>(.*?)</kernelgen>', docstring, re.DOTALL)
+    
+    if match_with_constval:
+        constval_str = match_with_constval.group(1)
+        template_str = match_with_constval.group(2)
+    elif match_without_constval:
+        constval_str = None
+        template_str = match_without_constval.group(1)
+    else:
+        raise ValueError("No template found in function docstring")
+    
+    print(f"\nExtracted template from {func.__name__}:")
+    print("=" * 80)
+    print(template_str)
+    print("=" * 80)
+    return template_str, extract_constval_from_lines(constval_str) if constval_str else {}
 
 def get_dependent_functions(func):
     """Get the source code of dependent functions that are defined in the same module"""
@@ -164,19 +270,36 @@ def extract_constexpr_declarations(template_str):
     rest_lines = [line for line in lines if line not in constexpr_lines]
     return constexpr_lines, "\n".join(rest_lines)
 
-def render_template(template_str, context, func_signature):
+def render_template(template_str, context, constval_dict, func_signature):
     """Render template with given context and proper function definition"""
     # Create the full template with imports and function definition
-    # import pdb; pdb.set_trace()
+    kw = {k: v if isinstance(v, (list, tuple)) else [v] for k, v in constval_dict.items()}
     constexpr_lines, rest_lines = extract_constexpr_declarations(template_str)
-    template = Template(rest_lines)
-    return template.render(**context), constexpr_lines
+    first = True
+    rendered_code = []
+    if len(kw) == 0:
+        template = Template(rest_lines)
+        rendered_lines = template.render(**context)
+        rendered_code.append(rendered_lines)
+    else:
+        rest_lines = "\n".join([f"    {line}" for line in rest_lines.split("\n")])
+        template = Template(rest_lines)
+        for vals in product(*(kw[k] for k in sorted(kw.keys()))):
+            const_context = {k: v for k, v in zip(sorted(kw.keys()), vals)}
+            rendered_lines = template.render(**context, **const_context)
+            rendered_code.append(f"""
+{'if' if first else 'elif'} {Condition(const_context).print()}: {rendered_lines}""")
+            first = False
+
+    return "\n".join(rendered_code), constexpr_lines
 
 def kernelgen(configs):
     def decorator(func):
+        print(f"Decorating {func.__name__}")
         if os.environ.get("KERNELGEN", "0") != "1":
             return func
-        template_str = extract_template_from_docstring(func)
+        template_str, constval_dict = extract_template_from_docstring(func)
+        
         if not template_str:
             raise ValueError("No template found in function docstring")
         
@@ -189,6 +312,8 @@ def kernelgen(configs):
         variants = defaultdict(set) # dict of rendered_code -> match_dict
         
         print(f"\nPre-rendering kernel variants for {func.__name__}:")
+        constexpr_lines = []
+
         for config in configs:
             # Create context for this config
             context = {
@@ -196,15 +321,14 @@ def kernelgen(configs):
                 for var in template_vars 
                 if var in config.kwargs
             }
-            
             # Check for missing variables
-            missing_vars = template_vars - set(context.keys())
+            missing_vars = template_vars - set(context.keys()) - set(constval_dict.keys())
             if missing_vars:
                 print(f"Warning: Config {config} missing variables: {missing_vars}")
                 continue
                 
             # Render template
-            rendered_code, constexpr_lines = render_template(template_str, context, "")  # Empty signature since we'll add it later
+            rendered_code, constexpr_lines = render_template(template_str, context, constval_dict, "")  # Empty signature since we'll add it later
             
             # Create match dict for this config
             match_dict = frozenset({
