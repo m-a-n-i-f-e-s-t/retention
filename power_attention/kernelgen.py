@@ -295,7 +295,6 @@ def render_template(template_str, context, constval_dict, func_signature):
 
 def kernelgen(configs):
     def decorator(func):
-        print(f"Decorating {func.__name__}")
         if os.environ.get("KERNELGEN", "0") != "1":
             return func
         template_str, constval_dict = extract_template_from_docstring(func)

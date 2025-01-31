@@ -382,9 +382,19 @@ if __name__ == "__main__":
     torch.testing.assert_close(inputs_triton['V'].grad, inputs_cutlass['V'].grad, atol=1e-4, rtol=1e-2)
     print("Bwd correctness check passed")
 
-    print(f"Benchmarking triton implemented chunk state \n {kw=}")
-    fwd_time = benchmark_speed('fwd', update_state, create_inputs, kw, compile=False)
-    print(f"Fwd time: {fwd_time:.2f} ms")
+    # Thorough benchmarking
+    def print_rowstr(rowstr):
+        print(" | ".join([f"{r.upper():<10}" for r in rowstr.split(",")]))
 
-    bwd_time = benchmark_speed('bwd', update_state, create_inputs, kw, compile=False)
-    print(f"Bwd time: {bwd_time:.2f} ms")
+    for mode in ['fwd', 'bwd', 'fwd+bwd']:
+        print(f"triton-vs-cutlass-batch{kw['b']}-chunks{kw['n']}-head{kw['h']}-dim{kw['d']}-{mode}")
+        print_rowstr("ctx,triton,cutlass,triton speedup")
+        for ctx in [2**i for i in range(7, 11)]:
+            kw['c'] = ctx
+            triton_time = benchmark_speed(mode, update_state, create_inputs, kw, compile=False)
+            cutlass_time = benchmark_speed(mode, update_state_cutlass, create_inputs, kw, compile=False)
+            speedup = cutlass_time / triton_time
+            print_rowstr(f"{ctx}, {triton_time:.2f}, {cutlass_time:.2f}, {speedup:.2f}")
+
+
+
