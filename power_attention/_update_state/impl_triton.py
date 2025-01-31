@@ -220,7 +220,9 @@ for off_D in range(0, D // BLOCK_D):
     {% endfor -%}
     else:
         dk_{{d//block1 - 1}} += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
+    {% endfor -%}
     
+    {% for i in range(block2) -%}
     if off_d2//block1 == 0:
         mask = ((range_d1 + {{0}} * block1) == (off_d2 + {{i}}))
         dk_{{0}} += tl.where(mask[None, :].broadcast_to(dk_{{0}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{0}}.shape), 0.)

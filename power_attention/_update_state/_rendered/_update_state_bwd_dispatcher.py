@@ -34,7 +34,7 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                       T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
                       block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr, V_IN_REGS: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
-    if ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((BLOCK_D == 16) and ((BLOCK_E == 64) and ((block1 == 16)))))) or (((BLOCK_T == 128) and ((V_IN_REGS == False) and ((BLOCK_D == 16) and ((BLOCK_E == 64) and ((block1 == 16)))))) or (((V_IN_REGS == True) and ((BLOCK_T == 128) and ((BLOCK_E == 32) and ((BLOCK_D == 16) and ((block1 == 16)))))) or ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((BLOCK_E == 32) and ((BLOCK_D == 16) and ((block1 == 16)))))))):
+    if ((BLOCK_D == 16) and ((V_IN_REGS == False) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16)))))) or (((BLOCK_D == 16) and ((V_IN_REGS == True) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16)))))) or (((BLOCK_D == 16) and ((V_IN_REGS == True) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16)))))) or ((BLOCK_D == 16) and ((V_IN_REGS == False) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16)))))))):
         
         if (d == 32):     
             tl.static_assert(block1 >= block2 and block1 % block2 == 0)
@@ -84,7 +84,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                 else:
                     dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
@@ -159,7 +158,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     dk_2 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                 else:
                     dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
@@ -256,7 +254,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     dk_6 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                 else:
                     dk_7 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
@@ -306,7 +303,7 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             tl.store(p_dv, dv, mask=mask_T[:, None])
                 
                 
-    elif ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((BLOCK_E == 32) and ((BLOCK_D == 32) and ((block1 == 16)))))) or (((V_IN_REGS == True) and ((BLOCK_T == 128) and ((BLOCK_E == 32) and ((BLOCK_D == 32) and ((block1 == 16)))))) or (((BLOCK_T == 128) and ((V_IN_REGS == False) and ((BLOCK_D == 32) and ((BLOCK_E == 64) and ((block1 == 16)))))) or ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((BLOCK_D == 32) and ((BLOCK_E == 64) and ((block1 == 16)))))))):
+    elif ((V_IN_REGS == True) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))) or (((V_IN_REGS == True) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))) or (((V_IN_REGS == False) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))) or ((V_IN_REGS == False) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))))):
         
         if (d == 32):     
             tl.static_assert(block1 >= block2 and block1 % block2 == 0)
@@ -363,20 +360,18 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 else:
                     dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                 
-                if off_d2//block1 == 0:
-                    mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
-                    dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
-                else:
-                    mask = ((range_d1 + 1 * block1) == (off_d2 + 0))
-                    dk_1 += tl.where(mask[None, :].broadcast_to(dk_1.shape), dk_d2_0[:, None].broadcast_to(dk_1.shape), 0.)
-                
                 dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
                 dk_d2_1 = tl.sum(dphik_1 * k_d1, 1) # BLOCK_T
                 if off_d1//block1 == 0:
                     dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                 else:
                     dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                
+                if off_d2//block1 == 0:
+                    mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
+                    dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
+                else:
+                    mask = ((range_d1 + 1 * block1) == (off_d2 + 0))
+                    dk_1 += tl.where(mask[None, :].broadcast_to(dk_1.shape), dk_d2_0[:, None].broadcast_to(dk_1.shape), 0.)
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 1))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_1[:, None].broadcast_to(dk_0.shape), 0.)
@@ -458,6 +453,16 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 else:
                     dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                 
+                dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
+                dk_d2_1 = tl.sum(dphik_1 * k_d1, 1) # BLOCK_T
+                if off_d1//block1 == 0:
+                    dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 1:
+                    dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 2:
+                    dk_2 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                else:
+                    dk_3 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
@@ -470,18 +475,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 else:
                     mask = ((range_d1 + 3 * block1) == (off_d2 + 0))
                     dk_3 += tl.where(mask[None, :].broadcast_to(dk_3.shape), dk_d2_0[:, None].broadcast_to(dk_3.shape), 0.)
-                
-                dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
-                dk_d2_1 = tl.sum(dphik_1 * k_d1, 1) # BLOCK_T
-                if off_d1//block1 == 0:
-                    dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 1:
-                    dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 2:
-                    dk_2 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                else:
-                    dk_3 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 1))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_1[:, None].broadcast_to(dk_0.shape), 0.)
@@ -585,6 +578,24 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 else:
                     dk_7 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                 
+                dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
+                dk_d2_1 = tl.sum(dphik_1 * k_d1, 1) # BLOCK_T
+                if off_d1//block1 == 0:
+                    dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 1:
+                    dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 2:
+                    dk_2 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 3:
+                    dk_3 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 4:
+                    dk_4 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 5:
+                    dk_5 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                elif off_d1//block1 == 6:
+                    dk_6 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
+                else:
+                    dk_7 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 0))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_0[:, None].broadcast_to(dk_0.shape), 0.)
@@ -609,26 +620,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 else:
                     mask = ((range_d1 + 7 * block1) == (off_d2 + 0))
                     dk_7 += tl.where(mask[None, :].broadcast_to(dk_7.shape), dk_d2_0[:, None].broadcast_to(dk_7.shape), 0.)
-                
-                dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
-                dk_d2_1 = tl.sum(dphik_1 * k_d1, 1) # BLOCK_T
-                if off_d1//block1 == 0:
-                    dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 1:
-                    dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 2:
-                    dk_2 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 3:
-                    dk_3 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 4:
-                    dk_4 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 5:
-                    dk_5 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                elif off_d1//block1 == 6:
-                    dk_6 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                else:
-                    dk_7 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                
                 if off_d2//block1 == 0:
                     mask = ((range_d1 + 0 * block1) == (off_d2 + 1))
                     dk_0 += tl.where(mask[None, :].broadcast_to(dk_0.shape), dk_d2_1[:, None].broadcast_to(dk_0.shape), 0.)
