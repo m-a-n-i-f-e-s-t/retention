@@ -3,8 +3,6 @@ import triton
 import triton.language as tl
 from math import comb
 from power_attention.kernelgen import kernelgen
-from _rendered._update_state_fwd_dispatcher import _update_state_fwd as _update_state_fwd_dispatcher
-from _rendered._update_state_bwd_dispatcher import _update_state_bwd as _update_state_bwd_dispatcher
 fwd_configs = [
     triton.Config({'block1': block1, 'BLOCK_D': BD, 'BLOCK_E': BE, 'BLOCK_T': BT}, num_warps=nw, num_stages=ns)
     for BD in [128, 256]
@@ -15,6 +13,7 @@ fwd_configs = [
     for ns in [1, 3]
 ]
 
+@triton.jit
 def get_offsets_p2(off_D, d, block1, block_D):
     """ Return off_d1, off_d2, and the multiplier for the starting offset on dimension 1 and 2, given block offset of the expanded dimension D. 
 
@@ -37,6 +36,7 @@ def get_offsets_p2(off_D, d, block1, block_D):
     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
     return m*block1, n*block2, multiplier
 
+@triton.jit
 def get_multiplier(m, n, d, block1, block_D):
     """ Return the multiplier for the starting offset on dimension 1 and 2, given block offsets along both dimensions.
     """
@@ -48,7 +48,7 @@ def get_multiplier(m, n, d, block1, block_D):
 
 @triton.autotune(fwd_configs, key=["deg", "d", "e"])
 @triton.jit
-# @kernelgen(fwd_configs)
+@kernelgen(fwd_configs)
 def _update_state_fwd(K, V, S, deg: tl.constexpr, 
                      stride_kb, stride_kt, stride_kh, stride_kd,
                      stride_vb, stride_vt, stride_vh, stride_ve,
@@ -56,19 +56,12 @@ def _update_state_fwd(K, V, S, deg: tl.constexpr,
                      T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
                      block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr):
     """ 
-    This is a templated kernel, which, when called with env var KERNELGEN=1, will render the embedded
-    template into a triton kernel in ./_rendered/_update_state_fwd_dispatcher.py. When KERNELGEN is set
-    to any other value, the kernelgen decorator is a no-op.
+    This is a templated kernel, which, when called, will render the embedded
+    template into a triton kernel in ./_rendered/_update_state_fwd_dispatcher.py, 
+    and call the rendered kernel.
 
-    Due to how triton.jit works, user who wants to update the kernel needs to run the kernelgen 
-    decorator with KERNELGEN=1 (which will produce error like "OSError: could not get source code"), 
-    before running the kernel.
-
-    For example, to render this specific kernel, run:
-    KERNELGEN=1 python impl_triton.py
-
-    Subsequently, run the kernel directly:
-    python impl_triton.py
+    Note that the rendered kernel is only for inspection purpose, modifying it will
+    have no effect on runtime.
 
     <kernelgen>
 block2: tl.constexpr = BLOCK_D // block1
@@ -97,21 +90,12 @@ s_{{i}} = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
 {% endfor -%}
 
 for tid in range(0, tl.cdiv(T, BLOCK_T)):
-    if tid == tl.cdiv(T, BLOCK_T) - 1:
-        mask = tl.arange(tid * BLOCK_T, (tid + 1) * BLOCK_T) < T
-        k_d1 = tl.load(p_k_d1, mask=mask[None, :], other=0.) # block1 x BLOCK_T
-        v = tl.load(p_v, mask=mask[:, None], other=0.)
-        {% for i in range(block2) -%}
-        k_d2_{{i}} = tl.load(p_k_d2_{{i}}, mask=mask[None, :], other=0.) * multiplier # BLOCK_T
-        phik_{{i}} = k_d1 * k_d2_{{i}}
-        {% endfor -%}
-    else:
-        k_d1 = tl.load(p_k_d1) # block1 x BLOCK_T
-        v = tl.load(p_v)
-        {% for i in range(block2) -%}
-        k_d2_{{i}} = tl.load(p_k_d2_{{i}}) * multiplier # BLOCK_T
-        phik_{{i}} = k_d1 * k_d2_{{i}}
-        {% endfor -%}
+    k_d1 = tl.load(p_k_d1) # block1 x BLOCK_T
+    v = tl.load(p_v)
+    {% for i in range(block2) -%}
+    k_d2_{{i}} = tl.load(p_k_d2_{{i}}) * multiplier # BLOCK_T
+    phik_{{i}} = k_d1 * k_d2_{{i}}
+    {% endfor -%}
     {% for i in range(block2) -%}
     s_{{i}} = tl.dot(phik_{{i}}.to(K.dtype.element_ty), v, s_{{i}})
     {% endfor -%}
@@ -128,12 +112,7 @@ tl.store(p_s_{{i}}, s_{{i}})
 {% endfor -%}
     </kernelgen>
     """
-    return _update_state_fwd_dispatcher(K, V, S, deg, 
-                     stride_kb, stride_kt, stride_kh, stride_kd,
-                     stride_vb, stride_vt, stride_vh, stride_ve,
-                     stride_sb, stride_sh, stride_sD, stride_se,
-                     T, H, d, e, D,
-                     block1, BLOCK_D, BLOCK_E, BLOCK_T)
+    pass
 
 bwd_configs = [
     triton.Config({'block1': block1, 'BLOCK_D': BD, 'BLOCK_E': BE, 'BLOCK_T': BT, 'V_IN_REGS': V_IN_REGS}, num_warps=nw, num_stages=ns)
@@ -157,7 +136,12 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                       stride_dvb, stride_dvt, stride_dvh, stride_dve,
                       T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
                       block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr, V_IN_REGS: tl.constexpr):
-    """<kernelgen d=(32, 64, 128)>
+    """
+    In this case, the kernel template is given a list of possible values that some
+    constexpr variables might take. This information is needed to be provided 
+    manually because the autotune config doesn't have it.
+
+    <kernelgen d=(32, 64, 128)>
 block2: tl.constexpr = BLOCK_D // block1
 {% set block1 = block1 -%}
 {% set block2 = BLOCK_D // block1 -%}
@@ -248,14 +232,7 @@ tl.store(p_dv, dv, mask=mask_T[:, None])
     
     </kernelgen>
     """
-    return _update_state_bwd_dispatcher(K, V, dS, dK, dV, deg,
-                      stride_kb, stride_kt, stride_kh, stride_kd,
-                      stride_vb, stride_vt, stride_vh, stride_ve,
-                      stride_dsb, stride_dsh, stride_dsD, stride_dse,
-                      stride_dkb, stride_dkt, stride_dkh, stride_dkd,
-                      stride_dvb, stride_dvt, stride_dvh, stride_dve,
-                      T, H, d, e, D,
-                      block1, BLOCK_D, BLOCK_E, BLOCK_T, V_IN_REGS)
+    pass
     
 
 def compute_expanded_dim(d, deg, d_block=16):
@@ -386,15 +363,18 @@ if __name__ == "__main__":
     def print_rowstr(rowstr):
         print(" | ".join([f"{r.upper():<10}" for r in rowstr.split(",")]))
 
+    ctx = 16384
     for mode in ['fwd', 'bwd', 'fwd+bwd']:
-        print(f"triton-vs-cutlass-batch{kw['b']}-chunks{kw['n']}-head{kw['h']}-dim{kw['d']}-{mode}")
-        print_rowstr("ctx,triton,cutlass,triton speedup")
-        for ctx in [2**i for i in range(7, 11)]:
-            kw['c'] = ctx
+        print(f"triton-vs-cutlass-batch{kw['b']}-ctx{ctx}-head{kw['h']}-dim{kw['d']}-{mode}")
+        print_rowstr("chunk_size,triton,cutlass,triton speedup")
+        for chunk_size in [2**i for i in range(6, 14)]:
+            kw['c'] = chunk_size
+            kw['n'] = ctx // chunk_size
             triton_time = benchmark_speed(mode, update_state, create_inputs, kw, compile=False)
             cutlass_time = benchmark_speed(mode, update_state_cutlass, create_inputs, kw, compile=False)
             speedup = cutlass_time / triton_time
-            print_rowstr(f"{ctx}, {triton_time:.2f}, {cutlass_time:.2f}, {speedup:.2f}")
+            print_rowstr(f"{chunk_size}, {triton_time:.2f}, {cutlass_time:.2f}, {speedup:.2f}")
+
 
 
 

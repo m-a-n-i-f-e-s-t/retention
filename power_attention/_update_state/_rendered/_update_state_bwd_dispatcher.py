@@ -1,30 +1,6 @@
 import triton
 import triton.language as tl
 
-@triton.jit
-def get_offsets_p2(off_D, d, block1, block_D):
-    """ Return off_d1, off_d2, and the multiplier for the starting offset on dimension 1 and 2, given block offset of the expanded dimension D. 
-
-    Define block1, block2 to be the block size along the first, the second dimension in the hypercube. Define m, n to be the offset in unit of blocks along the first, the second dimension in the hypercube.
-
-    We use the following invariant to find the offset
-       
-       block2 <= block1
-       m*(1+m)*block1/2 <= off_D*block2 <= (m+1)*(m+2)*block1/2
-       
-       or, let z = = off_D*block2/block1*2
-       m*(1+m) <= z <= (m+1)*(m+2)
-    """
-    tl.static_assert(d % block1 == 0)
-    block2: tl.constexpr = block_D // block1
-    tl.static_assert(block1 >= block2 and block1 % block2 == 0)
-    z = off_D.to(tl.float32)/(block1//block2)*2
-    m = (tl.math.floor((tl.math.sqrt(1 + 4*z) - 1) / 2)).to(tl.int32)
-    n = off_D - (m*(1+m)*(block1//block2)/2).to(tl.int32)
-    multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-    return m*block1, n*block2, multiplier
-
-@triton.jit
 def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                       stride_kb, stride_kt, stride_kh, stride_kd,
                       stride_vb, stride_vt, stride_vh, stride_ve,
@@ -34,7 +10,7 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                       T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
                       block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr, V_IN_REGS: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
-    if ((BLOCK_D == 16) and ((V_IN_REGS == False) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16)))))) or (((BLOCK_D == 16) and ((V_IN_REGS == True) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16)))))) or (((BLOCK_D == 16) and ((V_IN_REGS == True) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16)))))) or ((BLOCK_D == 16) and ((V_IN_REGS == False) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16)))))))):
+    if ((block1 == 16) and ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((BLOCK_E == 32) and ((V_IN_REGS == False)))))) or (((block1 == 16) and ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((BLOCK_E == 32) and ((V_IN_REGS == True)))))) or (((block1 == 16) and ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((BLOCK_E == 64) and ((V_IN_REGS == True)))))) or ((block1 == 16) and ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((BLOCK_E == 64) and ((V_IN_REGS == False)))))))):
         
         if (d == 32):     
             tl.static_assert(block1 >= block2 and block1 % block2 == 0)
@@ -303,7 +279,7 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             tl.store(p_dv, dv, mask=mask_T[:, None])
                 
                 
-    elif ((V_IN_REGS == True) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))) or (((V_IN_REGS == True) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))) or (((V_IN_REGS == False) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))) or ((V_IN_REGS == False) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((block1 == 16) and ((BLOCK_D == 32)))))))):
+    elif ((block1 == 16) and ((BLOCK_D == 32) and ((BLOCK_T == 128) and ((BLOCK_E == 32) and ((V_IN_REGS == False)))))) or (((block1 == 16) and ((BLOCK_D == 32) and ((BLOCK_T == 128) and ((BLOCK_E == 32) and ((V_IN_REGS == True)))))) or (((block1 == 16) and ((BLOCK_D == 32) and ((BLOCK_T == 128) and ((BLOCK_E == 64) and ((V_IN_REGS == True)))))) or ((block1 == 16) and ((BLOCK_D == 32) and ((BLOCK_T == 128) and ((BLOCK_E == 64) and ((V_IN_REGS == False)))))))):
         
         if (d == 32):     
             tl.static_assert(block1 >= block2 and block1 % block2 == 0)

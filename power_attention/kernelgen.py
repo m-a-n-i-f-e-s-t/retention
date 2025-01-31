@@ -2,6 +2,7 @@ import inspect
 import re
 import os
 import hashlib
+import linecache
 from collections import defaultdict
 from jinja2 import Template, Environment, meta
 from pathlib import Path
@@ -120,37 +121,23 @@ def extract_template_from_docstring(func):
     else:
         raise ValueError("No template found in function docstring")
     
-    print(f"\nExtracted template from {func.__name__}:")
-    print("=" * 80)
-    print(template_str)
-    print("=" * 80)
+    DEBUG = os.environ.get("KERNELGEN_DEBUG", None) is not None
+    if DEBUG:
+        print(f"\nExtracted template from {func.__name__}:")
+        print("=" * 80)
+        print(template_str)
+        print("=" * 80)
     return template_str, extract_constval_from_lines(constval_str) if constval_str else {}
-
-def get_dependent_functions(func):
-    """Get the source code of dependent functions that are defined in the same module"""
-    module = inspect.getmodule(func)
-    dependent_funcs = {}
-    
-    # Get all referenced names in the function
-    func_source = inspect.getsource(func)
-    referenced_names = set(re.findall(r'\b\w+\b', func_source))
-    
-    # Find dependent functions defined in the same module
-    for name in referenced_names:
-        if hasattr(module, name):
-            obj = getattr(module, name)
-            if inspect.isfunction(obj) and obj.__module__ == module.__name__:
-                dependent_funcs[name] = "@triton.jit\n" + inspect.getsource(obj)
-    
-    return dependent_funcs
 
 def get_template_variables(template_str):
     """Extract all variables used in the template"""
+    DEBUG = os.environ.get("KERNELGEN_DEBUG", None) is not None
     env = Environment()
     try:
         ast = env.parse(template_str)
         variables = meta.find_undeclared_variables(ast)
-        print("\nTemplate variables found:", sorted(list(variables)))
+        if DEBUG:
+            print("\nTemplate variables found:", sorted(list(variables)))
         return variables
     except Exception as e:
         print("\nError parsing template:")
@@ -234,7 +221,7 @@ class Condition:
 def get_function_signature(func):
     """Extract function signature including type hints but excluding decorators"""
     source_lines = inspect.getsource(func).split('\n')
-    sig_lines = ["@triton.jit"]
+    sig_lines = []
     in_signature = False
     parentheses_count = 0
     
@@ -295,8 +282,8 @@ def render_template(template_str, context, constval_dict, func_signature):
 
 def kernelgen(configs):
     def decorator(func):
-        if os.environ.get("KERNELGEN", "0") != "1":
-            return func
+        DEBUG = os.environ.get("KERNELGEN_DEBUG", None) is not None
+
         template_str, constval_dict = extract_template_from_docstring(func)
         
         if not template_str:
@@ -304,13 +291,13 @@ def kernelgen(configs):
         
         # Get template variables and dependent functions
         template_vars = get_template_variables(template_str)
-        dependent_funcs = get_dependent_functions(func)
         rendered_dir = get_rendered_dir(func)
         
         # Generate all variants up front
         variants = defaultdict(set) # dict of rendered_code -> match_dict
         
-        print(f"\nPre-rendering kernel variants for {func.__name__}:")
+        if DEBUG:
+            print(f"\nPre-rendering kernel variants for {func.__name__}:")
         constexpr_lines = []
 
         for config in configs:
@@ -344,10 +331,6 @@ def kernelgen(configs):
         dispatcher_code.append("import triton")
         dispatcher_code.append("import triton.language as tl")
         dispatcher_code.append("")
-
-        # Add dependent functions
-        for func_code in dependent_funcs.values():
-            dispatcher_code.append(func_code)
         
         # Add the main function signature and body
         dispatcher_code.append(get_function_signature(func))
@@ -381,34 +364,26 @@ def kernelgen(configs):
         final_code = "\n".join(dispatcher_code)
         
         # Save the generated code to _rendered directory
-        file_path = rendered_dir / f"{func.__name__}_dispatcher.py"
+        filename = f"{func.__name__}_dispatcher.py"
+        file_path = rendered_dir / filename
         with open(file_path, 'w') as f:
             f.write(final_code)
-        print(f"Generated dispatcher -> {file_path}")
+        if DEBUG:
+            print(f"Generated dispatcher -> {file_path}")
         
+        linecache.cache[filename] = (
+            len(final_code),
+            None,
+            final_code.splitlines(keepends=True),
+            filename
+        )
 
-        # Unfortunately triton will look at the generated code from disk, so we are 
-        # forced to have a second run to use the generated code.
-        # Create namespace and execute the code
+        code_obj = compile(final_code, filename, "exec")
         namespace = {}
-        exec(final_code, func.__globals__, namespace)
-        
-        # Get the generated function
+        exec(code_obj, func.__globals__, namespace)
         generated_func = namespace[func.__name__]
-        
-        # Add source code inspection capabilities
-        generated_func.__source__ = final_code
-        
-        # Override __str__ to show the source code
-        def __str__(self):
-            return self.__source__
-        generated_func.__str__ = __str__.__get__(generated_func)
-        
-        # Add repr to also show source
-        def __repr__(self):
-            return f"<Generated function {func.__name__}>\n{self.__source__}"
-        generated_func.__repr__ = __repr__.__get__(generated_func)
-        
+
+        # Get the generated function
         return generated_func
     
     return decorator
