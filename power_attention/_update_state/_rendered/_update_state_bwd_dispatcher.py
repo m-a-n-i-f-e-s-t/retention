@@ -39,15 +39,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
             m, n = 0, 0
             for m in range(0, d//block1):
-                off_d1 = m*block1
-                p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+                p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
             
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
                     # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-                    off_d1 = tl.multiple_of(off_d1, block1)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -62,7 +60,7 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
                     
                     dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
@@ -116,15 +114,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
             m, n = 0, 0
             for m in range(0, d//block1):
-                off_d1 = m*block1
-                p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+                p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
             
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
                     # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-                    off_d1 = tl.multiple_of(off_d1, block1)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -139,11 +135,11 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
                     
                     dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 1:
+                    elif m == 1:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 2:
+                    elif m == 2:
                         dk_2 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
@@ -211,15 +207,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
             m, n = 0, 0
             for m in range(0, d//block1):
-                off_d1 = m*block1
-                p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+                p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
             
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
                     # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-                    off_d1 = tl.multiple_of(off_d1, block1)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -234,19 +228,19 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
                     
                     dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 1:
+                    elif m == 1:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 2:
+                    elif m == 2:
                         dk_2 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 3:
+                    elif m == 3:
                         dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 4:
+                    elif m == 4:
                         dk_4 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 5:
+                    elif m == 5:
                         dk_5 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 6:
+                    elif m == 6:
                         dk_6 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_7 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
@@ -329,15 +323,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
             m, n = 0, 0
             for m in range(0, d//block1):
-                off_d1 = m*block1
-                p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+                p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
             
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
                     # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-                    off_d1 = tl.multiple_of(off_d1, block1)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -358,13 +350,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
                     
                     dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     
                     dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                     else:
                         dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
@@ -425,15 +417,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
             m, n = 0, 0
             for m in range(0, d//block1):
-                off_d1 = m*block1
-                p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+                p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
             
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
                     # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-                    off_d1 = tl.multiple_of(off_d1, block1)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -454,21 +444,21 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
                     
                     dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 1:
+                    elif m == 1:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 2:
+                    elif m == 2:
                         dk_2 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     
                     dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 1:
+                    elif m == 1:
                         dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 2:
+                    elif m == 2:
                         dk_2 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                     else:
                         dk_3 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
@@ -549,15 +539,13 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
             m, n = 0, 0
             for m in range(0, d//block1):
-                off_d1 = m*block1
-                p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+                p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
             
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
                     # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-                    off_d1 = tl.multiple_of(off_d1, block1)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -578,37 +566,37 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             
                     
                     dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 1:
+                    elif m == 1:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 2:
+                    elif m == 2:
                         dk_2 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 3:
+                    elif m == 3:
                         dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 4:
+                    elif m == 4:
                         dk_4 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 5:
+                    elif m == 5:
                         dk_5 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 6:
+                    elif m == 6:
                         dk_6 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_7 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     
                     dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
-                    if off_d1//block1 == 0:
+                    if m == 0:
                         dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 1:
+                    elif m == 1:
                         dk_1 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 2:
+                    elif m == 2:
                         dk_2 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 3:
+                    elif m == 3:
                         dk_3 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 4:
+                    elif m == 4:
                         dk_4 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 5:
+                    elif m == 5:
                         dk_5 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
-                    elif off_d1//block1 == 6:
+                    elif m == 6:
                         dk_6 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                     else:
                         dk_7 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1

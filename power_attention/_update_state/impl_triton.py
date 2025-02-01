@@ -181,15 +181,12 @@ if V_IN_REGS:
 
 m, n = 0, 0
 for m in range(0, d//block1):
-    off_d1 = m*block1
-    p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+    p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
     k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
 
     for n in range(0, (m+1)*block1//block2):
         off_d2 = n*block2
         multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-        # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-        off_d1 = tl.multiple_of(off_d1, block1)
         off_d2 = tl.multiple_of(off_d2, block2)
         off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
         {% for i in range(block2) -%}
@@ -210,10 +207,10 @@ for m in range(0, d//block1):
 
         {% for i in range(block2) %}
         dphik_{{i}} = tl.dot(v, tl.trans(ds_{{i}})).to(tl.float32) # BLOCK_T x block1
-        if off_d1//block1 == 0:
+        if m == 0:
             dk_0 += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
         {% for j in range(1, d//block1 - 1) -%}
-        elif off_d1//block1 == {{j}}:
+        elif m == {{j}}:
             dk_{{j}} += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
         {% endfor -%}
         else:
