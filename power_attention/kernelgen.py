@@ -170,6 +170,29 @@ def compute_config_hash(rendered_code):
     """Compute a deterministic hash of config values"""
     return hashlib.md5(rendered_code.encode()).hexdigest()[:8]
 
+def serialize_dict(d):
+    """Serialize a dictionary into a deterministic string representation.
+    
+    Args:
+        d: Dictionary to serialize
+        
+    Returns:
+        String representation of the dictionary with keys sorted alphabetically
+    """
+    if not isinstance(d, dict):
+        return str(d)
+        
+    # Sort items by key for deterministic output
+    items = []
+    for k in sorted(d.keys()):
+        v = d[k]
+        if isinstance(v, dict):
+            items.append(f"{k}:{serialize_dict(v)}")
+        else:
+            items.append(f"{k}:{v}")
+            
+    return "{" + ",".join(items) + "}"
+
 class Condition:
     """A class representing a condition, useful for printing out triton-allowed conditions"""
     def __init__(self, conditions=None):
@@ -195,10 +218,10 @@ class Condition:
         if len(condition) == 0:
             return "True"
         elif len(condition) == 1:
-            key, val = list(condition.items())[0]
+            key, val = list(sorted(condition.items(), key=lambda x: x[0]))[0]
             return f"({key} == {val})"
         else:
-            key, val = list(condition.items())[0]
+            key, val = list(sorted(condition.items(), key=lambda x: x[0]))[0]
             condition.pop(key)
             res = f"({key} == {val}) and ({Condition.print_condition(condition)})"
             condition[key] = val
@@ -211,8 +234,8 @@ class Condition:
         elif len(self.conditions) == 1:
             return Condition.print_condition(self.conditions[0])
         else:
-            c0 = self.conditions[0]
-            self.conditions.pop(0)
+            self.conditions = sorted(self.conditions, key=serialize_dict)
+            c0 = self.conditions.pop(0)
             res = f"({Condition.print_condition(c0)}) or ({self.print()})"
             self.conditions.insert(0, c0)
             return res
@@ -300,7 +323,7 @@ def kernelgen(configs):
             print(f"\nPre-rendering kernel variants for {func.__name__}:")
         constexpr_lines = []
 
-        for config in configs:
+        for config in sorted(configs, key=serialize_dict):
             # Create context for this config
             context = {
                 var: config.kwargs[var]

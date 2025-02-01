@@ -8,7 +8,7 @@ def _update_state_fwd(K, V, S, deg: tl.constexpr,
                      T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
                      block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
-    if ((BLOCK_T == 16) and ((block1 == 16) and ((BLOCK_D == 128) and ((BLOCK_E == 32))))) or (((BLOCK_T == 16) and ((block1 == 16) and ((BLOCK_D == 128) and ((BLOCK_E == 64))))) or (((block1 == 16) and ((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 32))))) or ((block1 == 16) and ((BLOCK_D == 128) and ((BLOCK_T == 32) and ((BLOCK_E == 32))))))):
+    if ((BLOCK_D == 128) and ((BLOCK_E == 32) and ((BLOCK_T == 16) and ((block1 == 16))))) or (((BLOCK_D == 128) and ((BLOCK_E == 32) and ((BLOCK_T == 32) and ((block1 == 16))))) or (((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 16) and ((block1 == 16))))) or ((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 32) and ((block1 == 16))))))):
         
         off_bh = tl.program_id(0)
         off_b = off_bh // H
@@ -108,7 +108,7 @@ def _update_state_fwd(K, V, S, deg: tl.constexpr,
         p_s_7 = S + range_d2_7[:, None] * stride_sD + range_e[None, :] * stride_se
         tl.store(p_s_7, s_7)
         
-    elif ((BLOCK_T == 16) and ((BLOCK_D == 256) and ((block1 == 16) and ((BLOCK_E == 64))))) or (((BLOCK_D == 256) and ((block1 == 16) and ((BLOCK_E == 64) and ((BLOCK_T == 32))))) or (((BLOCK_D == 256) and ((block1 == 16) and ((BLOCK_T == 32) and ((BLOCK_E == 32))))) or ((BLOCK_T == 16) and ((BLOCK_D == 256) and ((block1 == 16) and ((BLOCK_E == 32))))))):
+    elif ((BLOCK_D == 256) and ((BLOCK_E == 32) and ((BLOCK_T == 16) and ((block1 == 16))))) or (((BLOCK_D == 256) and ((BLOCK_E == 32) and ((BLOCK_T == 32) and ((block1 == 16))))) or (((BLOCK_D == 256) and ((BLOCK_E == 64) and ((BLOCK_T == 16) and ((block1 == 16))))) or ((BLOCK_D == 256) and ((BLOCK_E == 64) and ((BLOCK_T == 32) and ((block1 == 16))))))):
         
         off_bh = tl.program_id(0)
         off_b = off_bh // H

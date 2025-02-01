@@ -195,7 +195,6 @@ for off_D in range(0, D // BLOCK_D):
 
     {% for i in range(block2) %}
     dphik_{{i}} = tl.dot(v, tl.trans(ds_{{i}})).to(tl.float32) # BLOCK_T x block1
-    dk_d2_{{i}} = tl.sum(dphik_{{i}} * k_d1, 1) # BLOCK_T
     if off_d1//block1 == 0:
         dk_0 += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
     {% for j in range(1, d//block1 - 1) -%}
@@ -207,6 +206,7 @@ for off_D in range(0, D // BLOCK_D):
     {% endfor -%}
     
     {% for i in range(block2) -%}
+    dk_d2_{{i}} = tl.sum(dphik_{{i}} * k_d1, 1) # BLOCK_T
     if off_d2//block1 == 0:
         mask = ((range_d1 + {{0}} * block1) == (off_d2 + {{i}}))
         dk_{{0}} += tl.where(mask[None, :].broadcast_to(dk_{{0}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{0}}.shape), 0.)
