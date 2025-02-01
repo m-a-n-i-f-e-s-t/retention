@@ -3,6 +3,7 @@ import triton
 import triton.language as tl
 from math import comb
 from power_attention.kernelgen import kernelgen
+
 fwd_configs = [
     triton.Config({'block1': block1, 'BLOCK_D': BD, 'BLOCK_E': BE, 'BLOCK_T': BT}, num_warps=nw, num_stages=ns)
     for BD in [128, 256]
@@ -12,6 +13,13 @@ fwd_configs = [
     for nw in [4, 8]
     for ns in [1, 3]
 ]
+
+def keep(config):
+    block1 = config.kwargs["block1"]
+    block2 = config.kwargs["BLOCK_D"] // block1
+    if block1 >= block2 and block1 % block2 == 0:
+        return True
+    return False
 
 @triton.jit
 def get_offsets_p2(off_D, d, block1, block_D):
@@ -46,9 +54,9 @@ def get_multiplier(m, n, d, block1, block_D):
     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
     return multiplier
 
-@triton.autotune(fwd_configs, key=["deg", "d", "e"])
+@triton.autotune(list(filter(keep, fwd_configs)), key=["deg", "d", "e", "D"])
 @triton.jit
-@kernelgen(fwd_configs)
+@kernelgen(list(filter(keep, fwd_configs)))
 def _update_state_fwd(K, V, S, deg: tl.constexpr, 
                      stride_kb, stride_kt, stride_kh, stride_kd,
                      stride_vb, stride_vt, stride_vh, stride_ve,
@@ -125,9 +133,9 @@ bwd_configs = [
     for V_IN_REGS in [True, False]
 ]
 
-@triton.autotune(bwd_configs, key=["deg", "d", "e"])
+@triton.autotune(list(filter(keep, bwd_configs)), key=["deg", "d", "e"])
 @triton.jit
-@kernelgen(bwd_configs)
+@kernelgen(list(filter(keep, bwd_configs)))
 def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                       stride_kb, stride_kt, stride_kh, stride_kd,
                       stride_vb, stride_vt, stride_vh, stride_ve,
@@ -171,54 +179,61 @@ mask_T = range_t < T
 if V_IN_REGS:
     v = tl.load(p_v, mask=mask_T[:, None], other=0.)
 
-for off_D in range(0, D // BLOCK_D):
-    off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
-    off_d1 = tl.multiple_of(off_d1, block1)
-    off_d2 = tl.multiple_of(off_d2, block2)
+m, n = 0, 0
+for m in range(0, d//block1):
+    off_d1 = m*block1
     p_k_d1 = K + range_t[:, None] * stride_kt + (off_d1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
-    {% for i in range(block2) -%}
-    p_k_d2_{{i}} = K + range_t[:] * stride_kt + (off_d2 + {{i}}) * stride_kd # BLOCK_T
-    p_ds_{{i}} = dS + (range_d1[:, None] + off_D * BLOCK_D + {{i}} * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
-    {% endfor -%}
-
     k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
-    {% for i in range(block2) -%}
-    k_d2_{{i}} = tl.load(p_k_d2_{{i}}, mask=mask_T, other=0.) # BLOCK_T
-    ds_{{i}} = (tl.load(p_ds_{{i}}) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
-    {% endfor -%}
-    {% for i in range(block2) -%}
-    phik_{{i}} = k_d1 * (k_d2_{{i}}[:, None]) # BLOCK_T x block1
-    dv = tl.dot(phik_{{i}}.to(K.dtype.element_ty), ds_{{i}}, dv) # BLOCK_T x BLOCK_E
-    {% endfor %}
-    if not V_IN_REGS:
-        v = tl.load(p_v, mask=mask_T[:, None], other=0.)
 
-    {% for i in range(block2) %}
-    dphik_{{i}} = tl.dot(v, tl.trans(ds_{{i}})).to(tl.float32) # BLOCK_T x block1
-    if off_d1//block1 == 0:
-        dk_0 += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
-    {% for j in range(1, d//block1 - 1) -%}
-    elif off_d1//block1 == {{j}}:
-        dk_{{j}} += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
-    {% endfor -%}
-    else:
-        dk_{{d//block1 - 1}} += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
-    {% endfor -%}
-    
-    {% for i in range(block2) -%}
-    dk_d2_{{i}} = tl.sum(dphik_{{i}} * k_d1, 1) # BLOCK_T
-    if off_d2//block1 == 0:
-        mask = ((range_d1 + {{0}} * block1) == (off_d2 + {{i}}))
-        dk_{{0}} += tl.where(mask[None, :].broadcast_to(dk_{{0}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{0}}.shape), 0.)
-    {% for j in range(1, d//block1 - 1) -%}
-    elif off_d2//block1 == {{j}}:
-        mask = ((range_d1 + {{j}} * block1) == (off_d2 + {{i}}))
-        dk_{{j}} += tl.where(mask[None, :].broadcast_to(dk_{{j}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{j}}.shape), 0.)
-    {% endfor -%}
-    else:
-        mask = ((range_d1 + {{d//block1 - 1}} * block1) == (off_d2 + {{i}}))
-        dk_{{d//block1 - 1}} += tl.where(mask[None, :].broadcast_to(dk_{{d//block1 - 1}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{d//block1 - 1}}.shape), 0.)
-    {% endfor %}
+    for n in range(0, (m+1)*block1//block2):
+        off_d2 = n*block2
+        multiplier = 1 if (n + 1) * block2 > m * block1 else 2
+        # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
+        off_d1 = tl.multiple_of(off_d1, block1)
+        off_d2 = tl.multiple_of(off_d2, block2)
+        off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+        {% for i in range(block2) -%}
+        p_k_d2_{{i}} = K + range_t[:] * stride_kt + (off_d2 + {{i}}) * stride_kd # BLOCK_T
+        p_ds_{{i}} = dS + (range_d1[:, None] + off_D + {{i}} * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+        {% endfor -%}
+
+        {% for i in range(block2) -%}
+        k_d2_{{i}} = tl.load(p_k_d2_{{i}}, mask=mask_T, other=0.) # BLOCK_T
+        ds_{{i}} = (tl.load(p_ds_{{i}}) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+        {% endfor -%}
+        {% for i in range(block2) -%}
+        phik_{{i}} = k_d1 * (k_d2_{{i}}[:, None]) # BLOCK_T x block1
+        dv = tl.dot(phik_{{i}}.to(K.dtype.element_ty), ds_{{i}}, dv) # BLOCK_T x BLOCK_E
+        {% endfor %}
+        if not V_IN_REGS:
+            v = tl.load(p_v, mask=mask_T[:, None], other=0.)
+
+        {% for i in range(block2) %}
+        dphik_{{i}} = tl.dot(v, tl.trans(ds_{{i}})).to(tl.float32) # BLOCK_T x block1
+        if off_d1//block1 == 0:
+            dk_0 += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
+        {% for j in range(1, d//block1 - 1) -%}
+        elif off_d1//block1 == {{j}}:
+            dk_{{j}} += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
+        {% endfor -%}
+        else:
+            dk_{{d//block1 - 1}} += dphik_{{i}} * k_d2_{{i}}[:, None] # BLOCK_T x block1
+        {% endfor -%}
+        
+        {% for i in range(block2) -%}
+        dk_d2_{{i}} = tl.sum(dphik_{{i}} * k_d1, 1) # BLOCK_T
+        if off_d2//block1 == 0:
+            mask = ((range_d1 + {{0}} * block1) == (off_d2 + {{i}}))
+            dk_{{0}} += tl.where(mask[None, :].broadcast_to(dk_{{0}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{0}}.shape), 0.)
+        {% for j in range(1, d//block1 - 1) -%}
+        elif off_d2//block1 == {{j}}:
+            mask = ((range_d1 + {{j}} * block1) == (off_d2 + {{i}}))
+            dk_{{j}} += tl.where(mask[None, :].broadcast_to(dk_{{j}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{j}}.shape), 0.)
+        {% endfor -%}
+        else:
+            mask = ((range_d1 + {{d//block1 - 1}} * block1) == (off_d2 + {{i}}))
+            dk_{{d//block1 - 1}} += tl.where(mask[None, :].broadcast_to(dk_{{d//block1 - 1}}.shape), dk_d2_{{i}}[:, None].broadcast_to(dk_{{d//block1 - 1}}.shape), 0.)
+        {% endfor %}
 
 
 # save dk, dv
