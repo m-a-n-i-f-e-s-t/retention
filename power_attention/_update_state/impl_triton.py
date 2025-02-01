@@ -89,8 +89,9 @@ S += off_b.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh + off_D.to(
 range_t = tl.arange(0, BLOCK_T).to(tl.int64)
 range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
 range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
-p_k_d1 = K + range_d1[:, None] * stride_kd + range_t[None, :] * stride_kt
-p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
+p_k_d1 = K + range_d1[:, None] * stride_kd + range_t[None, :] * stride_kt # [block1 x BLOCK_T]
+p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve # [BLOCK_T x BLOCK_E]
+
 {% set block2 = BLOCK_D // block1 -%}
 {% for i in range(block2) -%}
 p_k_d2_{{i}} = K + range_t[:] * stride_kt + (off_d2 + {{i}}) * stride_kd
@@ -179,7 +180,6 @@ mask_T = range_t < T
 if V_IN_REGS:
     v = tl.load(p_v, mask=mask_T[:, None], other=0.)
 
-m, n = 0, 0
 for m in range(0, d//block1):
     p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
     k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)

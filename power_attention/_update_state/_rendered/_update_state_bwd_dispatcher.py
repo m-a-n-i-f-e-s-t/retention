@@ -37,7 +37,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             if V_IN_REGS:
                 v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
-            m, n = 0, 0
             for m in range(0, d//block1):
                 p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
@@ -45,7 +44,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-                    # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -112,7 +110,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             if V_IN_REGS:
                 v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
-            m, n = 0, 0
             for m in range(0, d//block1):
                 p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
@@ -120,7 +117,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-                    # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -205,7 +201,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             if V_IN_REGS:
                 v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
-            m, n = 0, 0
             for m in range(0, d//block1):
                 p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
@@ -213,7 +208,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-                    # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -321,7 +315,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             if V_IN_REGS:
                 v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
-            m, n = 0, 0
             for m in range(0, d//block1):
                 p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
@@ -329,7 +322,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-                    # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -415,7 +407,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             if V_IN_REGS:
                 v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
-            m, n = 0, 0
             for m in range(0, d//block1):
                 p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
@@ -423,7 +414,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-                    # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
@@ -537,7 +527,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             if V_IN_REGS:
                 v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
-            m, n = 0, 0
             for m in range(0, d//block1):
                 p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
                 k_d1 = tl.load(p_k_d1, mask=mask_T[:, None], other=0.)
@@ -545,7 +534,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                 for n in range(0, (m+1)*block1//block2):
                     off_d2 = n*block2
                     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
-                    # off_d1, off_d2, multiplier = get_offsets_p2(off_D, d, block1, BLOCK_D)
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
