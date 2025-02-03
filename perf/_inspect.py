@@ -44,8 +44,8 @@ def inspect_diff_details(gold, ref, test, tol, atol=0, num_vals=10):
             ref_vals = [ref[*abs_error_indices[i]].item() for i in range(len(abs_error_indices))]
             test_vals = [test[*abs_error_indices[i]].item() for i in range(len(abs_error_indices))]
             rel_error = gold_test_diff / torch.abs(gold)
-            return f"\tViolations: {num_violations}, {violation_pct * 100:.2f}%\nIndices: {abs_error_indices}\nGold: {gold_vals}...\nRef: {ref_vals}...\nTest: {test_vals}... \nMax rel error: {rel_error.max().item():.4f}", violation_pct
-        return "", violation_pct
+            return f"\tViolations: {num_violations}, {violation_pct * 100:.2f}%\nIndices: {abs_error_indices}\nGold: {gold_vals}...\nRef: {ref_vals}...\nTest: {test_vals}... \nMax rel error: {rel_error.max().item():.4f}"
+        return ""
     elif hasattr(gold, '__iter__'):
         if isinstance(gold, dict):
             keys = sorted(gold.keys())
