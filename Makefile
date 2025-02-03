@@ -4,20 +4,20 @@ PACKAGE_NAME := power-attention
 
 .PHONY: clean check-version check-test-version release release-test help deps-dev kernel refresh-deps refresh-deps-dev
 
-PIP := pip
-PYTEST := pytest
+PIP := python -m pip
+PYTEST := python -m pytest
 PYTHON := python
 
 define install_group_deps
-	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["dependency-groups"]["$(1)"]))' | $(PIP) install -r /dev/stdin
+	$(PYTHON) -c 'import tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["$(1)"]; [print(dep.split( "@ ")[-1] if " @ " in dep else dep) for dep in deps]' | $(PIP) install -r /dev/stdin
 endef
 
 define install_deps
 	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]))' | $(PIP) install -r /dev/stdin
 endef
 
-define install_group_deps
-	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["dependency-groups"]["$(1)"]))' | $(PIP) install -r /dev/stdin
+define uninstall_group_deps
+	$(PYTHON) -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["$(1)"]))' | xargs -n 1 $(PIP) uninstall -y
 endef
 
 define uninstall_deps
@@ -38,15 +38,15 @@ refresh-deps:
 
 refresh-deps-dev:
 	@echo "Uninstalling development dependencies..."
-	$(call uninstall_dev_deps)
+	$(call uninstall_group_deps,dev)
 	@echo "Reinstalling development dependencies..."
-	$(call install_dev_deps)
+	$(call install_group_deps,dev)
 
 # Clean and check
 clean:
 	rm -rf dist/ build/ *.egg-info/ *.so wheelhouse/ $(VENV_DIR)/.deps_*
 
-kernel:
+kernel: deps-dev
 	@python setup.py build_ext --inplace
 
 # Version checking

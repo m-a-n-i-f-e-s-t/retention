@@ -5,6 +5,18 @@ A PyTorch extension implementing symmetric power transformers - a variant of lin
 
 For details on the approach, see our paper: [Symmetric Power Transformers](https://manifestai.com/articles/symmetric-power-transformers/)
 
+## Performance
+
+The speed-per-token of the recurrent form of power attention is controlled by the size of the state, which grows with the power: squaring, cubing, etc., increase the state size. (In contrast, the speed-per-token of standard attention is controlled by context length.) Larger states learn better, but also slow down training. This results in a typical scaling effect, where the optimal state size increases with compute budget. These models dominate transformers at long context lengths when the state size is selected appropriately.
+
+![alt text](plots/xl_performance_plot.png)
+
+The above result is an 1.3-billion parameter model trained on 32k context length on [Longcrawl64](https://manifestai.com/articles/longcrawl64/). The x-axis measures the estimated time on the basis of FLOP utilization for an optimal implementation. We are not yet at that level of wall-clock performance, but we are getting closer.
+
+![alt text](plots/kernel_speed_plot.png)
+
+The above timings were measured on an A6000 GPU. The theoretically-achievable performance assumes that speed is FLOP-limited and that we can achieve a GPU utilization matching that of SDPA.
+
 ## Installation
 
 ### From PyPI (Recommended)
@@ -54,7 +66,7 @@ log_G = torch.nn.functional.logsigmoid(
 output = power_full(
     Q=Q, K=K, V=V, 
     log_G=log_G,          # Optional gating tensor
-    deg=4,                # Power parameter p
+    deg=2,                # Power parameter p
     chunk_size=128,       # Size of chunks for processing long sequences
 )
 ```
@@ -114,7 +126,7 @@ pip install -e .[dev]
 Run correctness tests:
 
 ```bash
-pytest perf/tests
+pytest
 ```
 
 Run benchmarks:
@@ -159,6 +171,7 @@ torchrun --standalone --nproc_per_node=4 train.py \
 
 Key training parameters:
 - `attention_kernel`: Use 'power' for symmetric power attention (default is 'sdpa' for standard attention)
+- `dataset`: Name of the dataset to use for training
 - `degree`: Power attention degree (default: 1)
 - `chunk_size`: Size of chunks for processing long sequences (default: None)
 - `disable_gating`: Set to true to disable gating mechanism (default: False)

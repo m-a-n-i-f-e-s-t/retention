@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 import torch
 from setuptools import find_packages, setup
@@ -17,6 +18,20 @@ def get_version():
     if not version_match:
         raise RuntimeError("Could not find version in pyproject.toml")
     return version_match.group(1)
+
+def get_dependencies():
+    """Get dependencies from pyproject.toml."""
+    with open(os.path.join(this_dir, "pyproject.toml"), "rb") as f:
+        pyproject = tomllib.load(f)
+    
+    # Get main dependencies
+    deps = pyproject["project"]["dependencies"]
+    
+    # Add dev dependencies
+    groups = pyproject.get("project.optional-dependencies", {})
+    deps.extend(groups.get("dev", []))
+    
+    return list(set(deps))  # Remove duplicates
 
 # Define all possible CUDA sources
 ALL_CUDA_SOURCES = [
@@ -262,34 +277,7 @@ ext_modules.append(
 )
 
 # Development dependencies
-dev_requires = [
-    'numpy>=2.2',
-    'torch>=2.5',
-    'triton>=3.1',
-    'setuptools==69.5.1',
-    'einops',
-    'ninja==1.11.1.3',
-    'pybind11==2.13.6',
-    'psutil',
-    'tiktoken',
-    'datasets',
-    'httpx',
-    'tqdm',
-    'pytest>=8.3.4',
-    'pytest-xdist',
-    'wheel',
-    'build',
-    'cibuildwheel',
-    'auditwheel',
-    'twine',
-    'click',
-    'pyyaml',
-    'bokeh',
-    'matplotlib',
-    'pymdown-extensions',
-    'mkdocs',
-    'mkdocstrings-python',
-]
+dev_requires = get_dependencies()
 
 setup(
     name=PACKAGE_NAME,

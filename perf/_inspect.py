@@ -1,6 +1,6 @@
 import torch
 
-from perf._timing import get_compiled_versions, estimate_runtime
+from perf._timing import get_compiled_version, estimate_runtime
 
 def top_k(tensor, k):
     """Return the top k values and indices of a whole tensor"""
@@ -61,8 +61,10 @@ def inspect_diff_details(gold, ref, test, tol, atol=0, num_vals=10):
         raise TypeError(f"Expected tensor or iterable of tensors, got {type(gold)}")
 
 
-def print_runtime(fn, *args, **kwargs):
-    fwd_fn, bwd_fn, fwdbwd_fn = get_compiled_versions(fn, *args, **kwargs)
+def print_runtime(fn, **inputs):
+    fwd_fn = get_compiled_version(fn, inputs, direction='fwd')
+    bwd_fn = get_compiled_version(fn, inputs, direction='bwd')
+    fwdbwd_fn = get_compiled_version(fn, inputs, direction='fwd+bwd')
     fwd_time = estimate_runtime(fwd_fn)
     bwd_time = estimate_runtime(bwd_fn)
     fwdbwd_time = estimate_runtime(fwdbwd_fn)
