@@ -445,13 +445,13 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
 class _power_attention(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, q, k, v, deg, log_g, r, w, causal, head_first, norm):
+    def forward(ctx, Q, K, V, deg, log_G, r, w, causal, head_first, norm):
         """ Args:
-            q: (B, H_Q, CTX, D)
-            k: (B, H_K, CTX, D)
-            v: (B, H_K, CTX, E)
+            Q: (B, H_Q, CTX, D)
+            K: (B, H_K, CTX, D)
+            V: (B, H_K, CTX, E)
             deg: int
-            log_g: (B, H_Q // R, CTX) or (B, CTX, H_Q // R)
+            log_G: (B, H_Q // R, CTX) or (B, CTX, H_Q // R)
             r: int, number of heads in q to form a group
             w: int, number of heads in k to form a group
             causal: bool
@@ -463,9 +463,9 @@ class _power_attention(torch.autograd.Function):
                 rowmax: (B, H_Q // R, CTX) if head_first else (B, CTX, H_Q // R)
         """
         if head_first:
-            b, hq, t, d, hk, e = *q.shape, k.shape[1], v.shape[-1]
+            b, hq, t, d, hk, e = *Q.shape, K.shape[1], V.shape[-1]
         else:
-            b, t, hq, d, hk, e = *q.shape, k.shape[2], v.shape[-1]
+            b, t, hq, d, hk, e = *Q.shape, K.shape[2], V.shape[-1]
         assert r in {1, 2, 4, 8, 16}, "r must be 1, 2, 4, 8, or 16"
         assert w in {1, 2, 4, 8, 16}, "w must be 1, 2, 4, 8, or 16"
         assert hq % r == 0, "hq must be divisible by r"
@@ -476,36 +476,36 @@ class _power_attention(torch.autograd.Function):
         assert e in {16, 32, 64, 128, 256}, "e must be 16, 32, 64, 128, or 256"
 
         h = hq // r
-        o = torch.empty_like(q)
+        o = torch.empty_like(Q)
 
         if head_first:
-            assert log_g.shape == (b, h, t)
-            log_gq = log_g.repeat_interleave(r, dim=2)
-            log_gk = log_g.repeat_interleave(w, dim=2)
-            gq_strides = (log_gq.stride(0), log_gq.stride(1), log_gq.stride(2))
-            gk_strides = (log_gk.stride(0), log_gk.stride(1), log_gk.stride(2))
-            q = q.view(b, h, t * r, d)
-            k = k.view(b, h, t * w, d)
-            v = v.view(b, h, t * w, e)
-            rowmax = torch.empty((b, h, t), device=q.device, dtype=torch.float32)
-            q_strides = (q.stride(0), q.stride(1), q.stride(2), q.stride(3))
-            k_strides = (k.stride(0), k.stride(1), k.stride(2), k.stride(3))
-            v_strides = (v.stride(0), v.stride(1), v.stride(2), v.stride(3))
+            assert log_G.shape == (b, h, t)
+            log_GQ = log_G.repeat_interleave(r, dim=2)
+            log_GK = log_G.repeat_interleave(w, dim=2)
+            gq_strides = (log_GQ.stride(0), log_GQ.stride(1), log_GQ.stride(2))
+            gk_strides = (log_GK.stride(0), log_GK.stride(1), log_GK.stride(2))
+            Q = Q.view(b, h, t * r, d)
+            K = K.view(b, h, t * w, d)
+            V = V.view(b, h, t * w, e)
+            rowmax = torch.empty((b, h, t), device=Q.device, dtype=torch.float32)
+            q_strides = (Q.stride(0), Q.stride(1), Q.stride(2), Q.stride(3))
+            k_strides = (K.stride(0), K.stride(1), K.stride(2), K.stride(3))
+            v_strides = (V.stride(0), V.stride(1), V.stride(2), V.stride(3))
             rowmax_strides = (rowmax.stride(0), rowmax.stride(1), rowmax.stride(2))
             o_strides = (o.stride(0), o.stride(1), o.stride(2), o.stride(3))
         else:
-            assert log_g.shape == (b, t, h)
-            q = q.view(b, t * r, h, d)
-            k = k.view(b, t * w, h, d)
-            v = v.view(b, t * w, h, e)
-            log_gq = log_g.repeat_interleave(r, dim=1)
-            log_gk = log_g.repeat_interleave(w, dim=1)
-            gq_strides = (log_gq.stride(0), log_gq.stride(2), log_gq.stride(1))
-            gk_strides = (log_gk.stride(0), log_gk.stride(2), log_gk.stride(1))
-            rowmax = torch.empty((b, t, h), device=q.device, dtype=torch.float32)
-            q_strides = (q.stride(0), q.stride(2), q.stride(1), q.stride(3))
-            k_strides = (k.stride(0), k.stride(2), k.stride(1), k.stride(3))
-            v_strides = (v.stride(0), v.stride(2), v.stride(1), v.stride(3))
+            assert log_G.shape == (b, t, h)
+            Q = Q.view(b, t * r, h, d)
+            K = K.view(b, t * w, h, d)
+            V = V.view(b, t * w, h, e)
+            log_GQ = log_G.repeat_interleave(r, dim=1)
+            log_GK = log_G.repeat_interleave(w, dim=1)
+            gq_strides = (log_GQ.stride(0), log_GQ.stride(2), log_GQ.stride(1))
+            gk_strides = (log_GK.stride(0), log_GK.stride(2), log_GK.stride(1))
+            rowmax = torch.empty((b, t, h), device=Q.device, dtype=torch.float32)
+            q_strides = (Q.stride(0), Q.stride(2), Q.stride(1), Q.stride(3))
+            k_strides = (K.stride(0), K.stride(2), K.stride(1), K.stride(3))
+            v_strides = (V.stride(0), V.stride(2), V.stride(1), V.stride(3))
             rowmax_strides = (rowmax.stride(0), rowmax.stride(2), rowmax.stride(1))
             o_strides = (o.stride(0), o.stride(2), o.stride(1), o.stride(3))
 
@@ -513,10 +513,10 @@ class _power_attention(torch.autograd.Function):
 
         grid = lambda args: (triton.cdiv(r*t, args["BM"]), b * h)
         _attn_fwd[grid](
-            q, k, v, log_gq, log_gk, rowmax, o, *q_strides, *k_strides, *v_strides, *rowmax_strides, *gq_strides, *gk_strides, *o_strides,
+            Q, K, V, log_GQ, log_GK, rowmax, o, *q_strides, *k_strides, *v_strides, *rowmax_strides, *gq_strides, *gk_strides, *o_strides,
             H=h, M_CTX=t*r, N_CTX=t*w, r=r, w=w, deg=deg, DIM_QK=d, DIM_VO=e, STAGE=stage, NORM=norm)
         
-        ctx.save_for_backward(q, k, v, rowmax, log_gq, log_gk)
+        ctx.save_for_backward(Q, K, V, rowmax, log_GQ, log_GK)
         ctx.b = b
         ctx.h = h
         ctx.t = t
@@ -540,10 +540,10 @@ class _power_attention(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, do, drowmax=None):
-        q, k, v, rowmax, log_gq, log_gk = ctx.saved_tensors
+        Q, K, V, rowmax, log_GQ, log_GK = ctx.saved_tensors
         do = do.contiguous() # needed for reuse o's strides for do
-        assert log_gq.is_contiguous() # needed for reuse log_gq's strides for dlog_gq
-        assert log_gk.is_contiguous() # needed for reuse log_gk's strides for dlog_gk
+        assert log_GQ.is_contiguous() # needed for reuse log_GQ's strides for dlog_GQ
+        assert log_GK.is_contiguous() # needed for reuse log_GK's strides for dlog_GK
         assert do.is_contiguous()
         b, h, t, norm, stage = ctx.b, ctx.h, ctx.t, ctx.norm, ctx.stage
         assert not norm, "normalized backward not implemented yet"
@@ -552,57 +552,67 @@ class _power_attention(torch.autograd.Function):
         do = do.contiguous()
         rowmax = rowmax.contiguous()
 
-        dq = torch.empty_like(q)
-        dk = torch.empty_like(k)
-        dv = torch.empty_like(v)
-        dlog_gq = torch.empty_like(log_gq)
-        dlog_gk = torch.empty_like(log_gk)
+        dQ = torch.empty_like(Q)
+        dK = torch.empty_like(K)
+        dV = torch.empty_like(V)
+        dlog_GQ = torch.empty_like(log_GQ)
+        dlog_GK = torch.empty_like(log_GK)
 
         if ctx.head_first:
-            dq_strides = (dq.stride(0), dq.stride(1), dq.stride(2), dq.stride(3))
-            dk_strides = (dk.stride(0), dk.stride(1), dk.stride(2), dk.stride(3))
-            dv_strides = (dv.stride(0), dv.stride(1), dv.stride(2), dv.stride(3))
+            dQ_strides = (dQ.stride(0), dQ.stride(1), dQ.stride(2), dQ.stride(3))
+            dK_strides = (dK.stride(0), dK.stride(1), dK.stride(2), dK.stride(3))
+            dV_strides = (dV.stride(0), dV.stride(1), dV.stride(2), dV.stride(3))
         else:
-            dq_strides = (dq.stride(0), dq.stride(2), dq.stride(1), dq.stride(3))
-            dk_strides = (dk.stride(0), dk.stride(2), dk.stride(1), dk.stride(3))
-            dv_strides = (dv.stride(0), dv.stride(2), dv.stride(1), dv.stride(3))
+            dQ_strides = (dQ.stride(0), dQ.stride(2), dQ.stride(1), dQ.stride(3))
+            dK_strides = (dK.stride(0), dK.stride(2), dK.stride(1), dK.stride(3))
+            dV_strides = (dV.stride(0), dV.stride(2), dV.stride(1), dV.stride(3))
         
         grid = lambda args: (triton.cdiv(w*t, args["BN1"]), b * h)
 
         _attn_bwd[grid](
-            q, k, v, log_gq, log_gk, rowmax, do, dq, dk, dv, dlog_gq, dlog_gk,
+            Q, K, V, log_GQ, log_GK, rowmax, do, dQ, dK, dV, dlog_GQ, dlog_GK,
             *q_strides, *k_strides, *v_strides, *rowmax_strides, *gq_strides, *gk_strides, *o_strides,
-            *dq_strides, *dk_strides, *dv_strides,
+            *dQ_strides, *dK_strides, *dV_strides,
             H=h, M_CTX=t*r, N_CTX=t*w, r=r, w=w, deg=deg, DIM_QK=d, DIM_VO=e, STAGE=stage)
         if ctx.head_first:
-            dlog_g = dlog_gq.view(b, h, t, r).sum(dim=-1) + dlog_gk.view(b, h, t, w).sum(dim=-1)
+            dlog_G = dlog_GQ.view(b, h, t, r).sum(dim=-1) + dlog_GK.view(b, h, t, w).sum(dim=-1)
         else:
-            dlog_g = dlog_gq.view(b, t, r, h).sum(dim=-2) + dlog_gk.view(b, t, w, h).sum(dim=-2)
-        return dq, dk, dv, None, dlog_g, None, None, None, None, None
+            dlog_G = dlog_GQ.view(b, t, r, h).sum(dim=-2) + dlog_GK.view(b, t, w, h).sum(dim=-2)
+        return dQ, dK, dV, None, dlog_G, None, None, None, None, None
 
 
-def attention(q, k, v, deg, log_g, r=1, w=1, causal=True, head_first=False, norm=False):
-    return _power_attention.apply(q, k, v, deg, log_g, r, w, causal, head_first, norm)
+def attention(Q, K, V, deg, log_G, r=1, w=1, causal=True, head_first=False, norm=False):
+    return _power_attention.apply(Q, K, V, deg, log_G, r, w, causal, head_first, norm)
 
 
-def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', scale=1.0, deg=2, r=1, w=1, causal=True, head_first=False, norm=False, requires_grad=False):
-    generator = torch.Generator(device=device).manual_seed(42)
-    q = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) / d**.25
-    k = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) / d**.25
-    v = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator)
-    log_g = torch.zeros(size=(b, t, h), dtype=torch.float32, device=device) - .01
+def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', scale=1.0, deg=2, r=1, w=1, causal=True, head_first=False, norm=False, requires_grad=False, seed=42, std=1.0):
+    generator = torch.Generator(device=device).manual_seed(seed)
+    Q = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) * std
+    K = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) * std
+    V = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) * std
+    log_G = torch.zeros(size=(b, t, h), dtype=torch.float32, device=device)
     if requires_grad:
-        q, k, v, log_g = tree_map(lambda x: x.requires_grad_(True) if x is not None else None, (q, k, v, log_g))
+        Q, K, V, log_G = tree_map(lambda x: x.requires_grad_(True) if x is not None else None, (Q, K, V, log_G))
     
-    return dict(q=q, k=k, v=v, log_g=log_g, deg=deg, r=r, w=w, causal=causal, head_first=head_first, norm=norm)
+    return dict(Q=Q, K=K, V=V, log_G=log_G, deg=deg, r=r, w=w, causal=causal, head_first=head_first, norm=norm)
 
 
 if __name__ == "__main__":
-    q = torch.randn(1, 1024, 1024, 16, device="cuda", requires_grad=True)
-    k = torch.randn(1, 1024, 1024, 16, device="cuda", requires_grad=True)
-    v = torch.randn(1, 1024, 1024, 16, device="cuda", requires_grad=True)
-    deg = 1
-    log_g = torch.randn(1, 1024, 1024, device="cuda", requires_grad=True)
-    o, rowmax = attention(q, k, v, deg, log_g, r=1, w=1, causal=True, head_first=False)
-    o.backward(torch.ones_like(o))
+    from power_attention._attention.impl import attention as attention_cutlass, create_inputs as create_inputs_cutlass
+    from perf._timing import benchmark_speed
 
+    # Hyperparameters
+    kw = dict(b=4, t=1024, h=16, d=64, dtype=torch.float16, device='cuda', scale=1.0, deg=2, seed=42)
+
+    # Check correctness
+    inputs_triton = create_inputs(**(kw | {'requires_grad': True, 'r': 1, 'w': 1, 'causal': True, 'head_first': False, 'norm': False}))
+    inputs_cutlass = create_inputs_cutlass(**(kw | {'requires_grad': True}))
+    for key in ['Q', 'K', 'V', 'log_G']:
+        torch.testing.assert_close(inputs_triton[key], inputs_cutlass[key])
+    o_triton, rowmax_triton = attention(**inputs_triton)
+    o_cutlass, rowmax_cutlass = attention_cutlass(**inputs_cutlass)
+    torch.testing.assert_close(o_triton, o_cutlass)
+    torch.testing.assert_close(rowmax_triton, rowmax_cutlass)
+    print("Correctness check passed")
+    
+    
