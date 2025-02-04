@@ -156,7 +156,7 @@ def _attn_fwd_inner(acc, m_i, q, gq, p_k, p_gk, p_v, #
     return acc, m_i
 
 
-@triton.autotune(list(filter(keep, fwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating"], prune_configs_by={'early_config_prune': prune_configs})
+@triton.autotune(list(filter(keep, fwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"], prune_configs_by={'early_config_prune': prune_configs})
 @triton.jit
 def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, M, Out,  #
               stride_qb, stride_qh, stride_qm, stride_qd,  #
@@ -368,7 +368,7 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, #
     return dq, dgq
 
 
-@triton.autotune(list(filter(keep_bwd, bwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating"], prune_configs_by={'early_config_prune': prune_configs_bwd})
+@triton.autotune(list(filter(keep_bwd, bwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"], prune_configs_by={'early_config_prune': prune_configs_bwd})
 @triton.jit
 def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
               stride_qb, stride_qh, stride_qm, stride_qd, #
