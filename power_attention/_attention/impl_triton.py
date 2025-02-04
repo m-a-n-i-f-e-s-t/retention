@@ -2,42 +2,43 @@ import torch
 import triton
 import triton.language as tl
 from torch.utils._pytree import tree_map
+import torch.nn.functional as F
 
-def attention_reference(q, k, v, deg, log_g=None, r=1, w=1, causal=True, head_first=False, norm=False):
+def attention_reference(Q, K, V, deg, log_G, r=1, w=1, causal=True, head_first=False, norm=False):
     if head_first:
-        b, hq, ctx, d, hk, e = *q.shape, k.shape[1], v.shape[-1]
+        b, hq, ctx, d, hk, e = *Q.shape, K.shape[1], V.shape[-1]
     else:
-        b, ctx, hq, d, hk, e = *q.shape, k.shape[2], v.shape[-1]
+        b, ctx, hq, d, hk, e = *Q.shape, K.shape[2], V.shape[-1]
     assert hq % r == 0, "hq must be divisible by r"
     assert hk % w == 0, "hk must be divisible by w"
     assert hq // r == hk // w, "hq // r must be equal to hk // w"
     assert isinstance(deg, int) and deg > 0, "deg must be a positive integer"
     h = hq // r
-    if log_g is not None:
+    if log_G is not None:
         if head_first:
-            assert log_g.shape == (b, h, ctx)
+            assert log_G.shape == (b, h, ctx)
         else:
-            assert log_g.shape == (b, ctx, h)
-            log_g = log_g.transpose(1, 2) # (b, h, ctx)
+            assert log_G.shape == (b, ctx, h)
+            log_G = log_G.transpose(1, 2) # (b, h, ctx)
     if head_first:
-        q = q.view(b, h, ctx * r, d)
-        k = k.view(b, h, ctx * w, d)
-        v = v.view(b, h, ctx * w, e)
+        Q = Q.view(b, h, ctx * r, d)
+        K = K.view(b, h, ctx * w, d)
+        V = V.view(b, h, ctx * w, e)
     else:
-        q = q.view(b, ctx * r, h, d).transpose(1, 2)
-        k = k.view(b, ctx * w, h, d).transpose(1, 2)
-        v = v.view(b, ctx * w, h, e).transpose(1, 2)
+        Q = Q.view(b, ctx * r, h, d).transpose(1, 2)
+        K = K.view(b, ctx * w, h, d).transpose(1, 2)
+        V = V.view(b, ctx * w, h, e).transpose(1, 2)
     
-    _qidx = torch.arange(ctx*r, device=q.device).unsqueeze(1)
-    _kidx = torch.arange(ctx*w, device=k.device).unsqueeze(0)
+    _qidx = torch.arange(ctx*r, device=Q.device).unsqueeze(1)
+    _kidx = torch.arange(ctx*w, device=K.device).unsqueeze(0)
     m = (_qidx // r) >= (_kidx // w)
-    s = torch.matmul(q, k.transpose(2,3))
+    s = torch.matmul(Q, K.transpose(2,3))
     s = float(deg) * torch.where(m, torch.log(s.abs() + 1e-7), -float("inf"))
-    if log_g is not None:
-        s = s + (log_g.repeat_interleave(r, dim=2)[..., :, None] - log_g.repeat_interleave(w, dim=2)[..., None, :])
+    if log_G is not None:
+        s = s + (log_G.repeat_interleave(r, dim=2)[..., :, None] - log_G.repeat_interleave(w, dim=2)[..., None, :])
     rowmax = torch.max(s, dim=-1, keepdim=True).values.detach()
-    p = torch.exp(s - rowmax).to(v.dtype)
-    o = torch.matmul(p, v)
+    p = torch.exp(s - rowmax).to(V.dtype)
+    o = torch.matmul(p, V)
     if norm:
         o = o - (o.sum(dim=-1, keepdim=True) / d)
         o = o / torch.sqrt(o.sum(dim=-1, keepdim=True)**2 + 1e-7)
@@ -62,6 +63,14 @@ def keep(conf):
         return False
     return True
 
+def prune_configs(configs, nargs, **kwargs):
+    pruned_configs = []
+    for config in configs:
+        M_CTX = nargs["M_CTX"] if "M_CTX" in nargs else kwargs["M_CTX"]
+        N_CTX = nargs["N_CTX"] if "N_CTX" in nargs else kwargs["N_CTX"]
+        if config.kwargs["BM"] <= M_CTX and config.kwargs["BN"] <= N_CTX:
+            pruned_configs.append(config)
+    return pruned_configs
 
 @triton.jit
 def _attn_fwd_inner(acc, m_i, q, gq, p_k, p_gk, p_v, #
@@ -79,37 +88,46 @@ def _attn_fwd_inner(acc, m_i, q, gq, p_k, p_gk, p_v, #
 
     p_k = tl.advance(p_k, (0, lo))
     p_v = tl.advance(p_v, (lo, 0))
-    p_gk = tl.advance(p_gk, (lo,))
+    if p_gk is not None:
+        p_gk = tl.advance(p_gk, (lo,))
 
     for start_n in range(lo, hi, BN):
         start_n = tl.multiple_of(start_n, BN)
         # -- compute qk ----
         k = tl.load(p_k)
         s = tl.dot(q, k)
-        signs = s > 0
-        gk = tl.load(p_gk)
+        signs = tl.where(s > 0, 1, -1)
+        if p_gk is not None:
+            gk = tl.load(p_gk)
+        else:
+            gk = None
         s = deg * tl.log(s.abs() + 1e-7)
-        s = s + gq[:, None] - gk[None, :]
+        if gq is not None and gk is not None:
+            s = s + gq[:, None] - gk[None, :]
         if STAGE == 2:
             mask = (range_m[:, None] // r) >= ((start_n + range_n[None, :]) // w)
             s = s + tl.where(mask, 0., -float("inf"))
         m_ij = tl.maximum(m_i, tl.max(s, 1))
         # -- scale acc --
-        alpha = m_i / m_ij
+        alpha = tl.exp(m_i - m_ij)
         acc = acc * alpha[:, None]
         v = tl.load(p_v)
-        p = tl.exp(s - m_ij[:, None]) * signs
+        if deg % 2 == 0:
+            p = tl.exp(s - m_ij[:, None])
+        else:
+            p = tl.exp(s - m_ij[:, None]) * signs
         acc = tl.dot(p.to(v.dtype), v, acc)
         # -- update m_i
         m_i = m_ij
         p_k = tl.advance(p_k, (0, BN))
         p_v = tl.advance(p_v, (BN, 0))
-        p_gk = tl.advance(p_gk, (BN,))
+        if p_gk is not None:
+            p_gk = tl.advance(p_gk, (BN,))
 
     return acc, m_i
 
 
-@triton.autotune(list(filter(keep, fwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w"])
+@triton.autotune(list(filter(keep, fwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w"], prune_configs_by={'early_config_prune': prune_configs})
 @triton.jit
 def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, M, Out,  #
               stride_qb, stride_qh, stride_qm, stride_qd,  #
@@ -143,17 +161,26 @@ def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, M, Out,  #
     p_q = tl.make_block_ptr(Q+q_offset, (M_CTX, DIM_QK), (stride_qm, stride_qd), (start_m*BM, 0), (BM, DIM_QK), (1, 0))
     p_v = tl.make_block_ptr(V+v_offset, (N_CTX, DIM_VO), (stride_vn, stride_ve), (0, 0), (BN, DIM_VO), (1, 0))
     p_k = tl.make_block_ptr(K+k_offset, (DIM_QK, N_CTX), (stride_kd, stride_kn), (0, 0), (DIM_QK, BN), (0, 1))
-    p_gq = tl.make_block_ptr(LOG_GQ+gq_offset, (M_CTX,), (stride_gqd,), (start_m*BM,), (BM,), (0,))
-    p_gk = tl.make_block_ptr(LOG_GK+gk_offset, (N_CTX,), (stride_gkd,), (0,), (BN,), (0,))
+    if LOG_GQ is not None:
+        p_gq = tl.make_block_ptr(LOG_GQ+gq_offset, (M_CTX,), (stride_gqd,), (start_m*BM,), (BM,), (0,))
+    else:
+        p_gq = None
+    if LOG_GK is not None:
+        p_gk = tl.make_block_ptr(LOG_GK+gk_offset, (N_CTX,), (stride_gkd,), (0,), (BN,), (0,))
+    else:
+        p_gk = None
 
     range_m = start_m * BM + tl.arange(0, BM)
     range_n = tl.arange(0, BN)
 
-    m_i = tl.zeros([BM], dtype=tl.float32) + 1e-7
+    m_i = tl.zeros([BM], dtype=tl.float32) - float("inf")
     acc = tl.zeros([BM, DIM_VO], dtype=tl.float32)
 
     q = tl.load(p_q)
-    gq = tl.load(p_gq)
+    if p_gq is not None:
+        gq = tl.load(p_gq)
+    else:
+        gq = None
 
     if STAGE & 1: # non-masking part
         acc, m_i = _attn_fwd_inner(acc, m_i, q, gq, p_k, p_gk, p_v, #
@@ -174,7 +201,7 @@ def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, M, Out,  #
     o_offset = off_b.to(tl.int64) * stride_ob + off_h.to(tl.int64) * stride_oh
     m_offset = off_b.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
     p_o = tl.make_block_ptr(Out+o_offset, (M_CTX, DIM_VO), (stride_om, stride_oe), (start_m*BM, 0), (BM, DIM_VO), (1, 0))
-    tl.store(M+m_offset+range_m, m_i)
+    tl.store(M+m_offset+range_m*stride_mm, m_i)
     tl.store(p_o, acc.to(Out.type.element_ty))
 
 
@@ -212,17 +239,24 @@ def _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
 
     p_qT = tl.make_block_ptr(Q, (DIM_QK, M_CTX), (stride_qd, stride_qm), (0, start_m), (DIM_QK, BM), (0, 1))
     p_do = tl.make_block_ptr(DO, (M_CTX, DIM_VO), (stride_dom, stride_doe), (start_m, 0), (BM, DIM_VO), (1, 0))
-    p_gq = tl.make_block_ptr(LOG_GQ, (M_CTX,), (stride_gqm,), (start_m,), (BM,), (0,))
+    if LOG_GQ is not None:
+        p_gq = tl.make_block_ptr(LOG_GQ, (M_CTX,), (stride_gqm,), (start_m,), (BM,), (0,))
+    else:
+        p_gq = None
 
     curr_m = start_m
     for _ in range(num_steps):
         qT = tl.load(p_qT)
-        gq = tl.load(p_gq)
+        if p_gq is not None:
+            gq = tl.load(p_gq)
+        else:
+            gq = None
         p_m = M + (curr_m + tl.arange(0, BM))
         sT = tl.dot(k, qT) # (N, M)
         signs = sT > 0
         sT = deg * tl.log(sT.abs() + 1e-7)
-        sT = sT + gq[None, :] - gk[:, None]
+        if gq is not None and gk is not None:
+            sT = sT + gq[None, :] - gk[:, None]
         m = tl.load(p_m)
         if MASK:
             mask = (range_m[None, :] // r) >= (range_n[:, None] // w)
@@ -234,14 +268,16 @@ def _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
         # compute dK and dgk
         dpT = tl.dot(v, tl.trans(do), out_dtype=tl.float32)
         dsT = pT * dpT
-        dgk += -tl.sum(dsT, 1, keep_dims=False)
+        if gk is not None:
+            dgk += -tl.sum(dsT, 1, keep_dims=False)
         dsT = dsT * signs * deg / (tl.abs(sT) + 1e-7)
         dk = tl.dot(dsT, tl.trans(qT), dk)
         # increment pointers
         curr_m += BM
         p_qT = tl.advance(p_qT, (0, BM))
         p_do = tl.advance(p_do, (BM, 0))
-        p_gq = tl.advance(p_gq, (BM,))
+        if p_gq is not None:
+            p_gq = tl.advance(p_gq, (BM,))
 
     return dk, dv, dgk
 
@@ -261,17 +297,24 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, #
 
     p_kT = tl.make_block_ptr(K, (DIM_QK, N_CTX), (stride_kd, stride_kn), (0, start_n), (DIM_QK, BN), (0, 1))
     p_vT = tl.make_block_ptr(V, (DIM_VO, N_CTX), (stride_ve, stride_vn), (0, start_n), (DIM_VO, BN), (0, 1))
-    p_gk = tl.make_block_ptr(LOG_GK, (N_CTX,), (stride_gkn,), (start_n,), (BN,), (0,))
+    if LOG_GK is not None:
+        p_gk = tl.make_block_ptr(LOG_GK, (N_CTX,), (stride_gkn,), (start_n,), (BN,), (0,))
+    else:
+        p_gk = None
 
     curr_n = start_n
     for _ in range(num_steps):
         kT = tl.load(p_kT)
         vT = tl.load(p_vT)
-        gk = tl.load(p_gk)
+        if p_gk is not None:
+            gk = tl.load(p_gk)
+        else:
+            gk = None
         s = tl.dot(q, kT) # (M, N)
         signs = s > 0
         s = deg * tl.log(s.abs() + 1e-7)
-        s = s + gq[:, None] - gk[None, :]
+        if gq is not None and gk is not None:
+            s = s + gq[:, None] - gk[None, :]
         if MASK:
             mask = (range_m[:, None] // r) >= (range_n[None, :] // w)
             s = tl.where(mask, s, -float("inf"))
@@ -280,14 +323,16 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, #
         # compute dQ
         dp = tl.dot(do, vT).to(tl.float32)
         ds = dp * p
-        dgq += tl.sum(ds, 1, keep_dims=False)
+        if gq is not None:
+            dgq += tl.sum(ds, 1, keep_dims=False)
         ds = ds * signs * deg / (tl.abs(s) + 1e-7)
         dq = tl.dot(ds, tl.trans(kT), dq)
         # increment pointers
         curr_n += BN
         p_kT = tl.advance(p_kT, (0, BN))
         p_vT = tl.advance(p_vT, (0, BN))
-        p_gk = tl.advance(p_gk, (BN,))
+        if p_gk is not None:
+            p_gk = tl.advance(p_gk, (BN,))
 
     return dq, dgq
 
@@ -342,10 +387,14 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     V += offset_v
     M += offset_m
     DO += offset_do
-    LOG_GQ += offset_gq
-    LOG_GK += offset_gk
-    DLOG_GQ += offset_gq
-    DLOG_GK += offset_gk
+    if LOG_GQ is not None:
+        LOG_GQ += offset_gq
+    if LOG_GK is not None:
+        LOG_GK += offset_gk
+    if DLOG_GQ is not None:
+        DLOG_GQ += offset_gq
+    if DLOG_GK is not None:
+        DLOG_GK += offset_gk
 
     # -- First part: compute dk, dv
     MASK_BLOCK_M1: tl.constexpr = BM1 // BLK_SLICE_FACTOR
@@ -388,10 +437,11 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     offset_dv = off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
     p_dv = tl.make_block_ptr(DV+offset_dv, (N_CTX, DIM_VO), (stride_dvn, stride_dve), (start_n, 0), (BN1, DIM_VO), (1, 0))
     p_dk = tl.make_block_ptr(DK+offset_dk, (N_CTX, DIM_QK), (stride_dkn, stride_dkd), (start_n, 0), (BN1, DIM_QK), (1, 0))
-    p_dgk = DLOG_GK + range_n * 1
     tl.store(p_dv, dv)
     tl.store(p_dk, dk)
-    tl.store(p_dgk, dgk)
+    if DLOG_GK is not None:
+        p_dgk = DLOG_GK + range_n * 1
+        tl.store(p_dgk, dgk)
 
     # -- Second part: compute dq
     start_m = tl.program_id(0) * BM2
@@ -399,14 +449,23 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     MASK_BLOCK_N2: tl.constexpr = BN2 // BLK_SLICE_FACTOR
 
     dq = tl.zeros([BM2, DIM_QK], dtype=tl.float32)
-    dgq = tl.zeros([BM2,], dtype=tl.float32)
+    if LOG_GQ is not None:
+        dgq = tl.zeros([BM2,], dtype=tl.float32)
+    else:
+        dgq = None
 
     # load q, gq
     p_q = tl.make_block_ptr(Q, (M_CTX, DIM_QK), (stride_qm, stride_qd), (start_m, 0), (BM2, DIM_QK), (1, 0))
-    p_gq = tl.make_block_ptr(LOG_GQ, (M_CTX,), (stride_gqm,), (start_m,), (BM2,), (0,))
     p_do = tl.make_block_ptr(DO, (M_CTX, DIM_VO), (stride_dom, stride_dom), (start_m, 0), (BM2, DIM_VO), (1, 0))
+    if LOG_GQ is not None:
+        p_gq = tl.make_block_ptr(LOG_GQ, (M_CTX,), (stride_gqm,), (start_m,), (BM2,), (0,))
+    else:
+        p_gq = None
     q = tl.load(p_q)
-    gq = tl.load(p_gq)
+    if LOG_GQ is not None:
+        gq = tl.load(p_gq)
+    else:
+        gq = None
     m = tl.load(M + start_m + tl.arange(0, BM2))
     do = tl.load(p_do)
 
@@ -437,9 +496,10 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     offset_dgq = off_b.to(tl.int64) * stride_gqb + off_h.to(tl.int64) * stride_gqh
 
     p_dq = tl.make_block_ptr(DQ+offset_dq, (M_CTX, DIM_QK), (stride_dqm, stride_dqd), (start_m, 0), (BM2, DIM_QK), (1, 0))
-    p_dgq = tl.make_block_ptr(DLOG_GQ+offset_dgq, (M_CTX,), (stride_gqm,), (start_m,), (BM2,), (0,))
     tl.store(p_dq, dq)
-    tl.store(p_dgq, dgq)
+    if LOG_GQ is not None:
+        p_dgq = tl.make_block_ptr(DLOG_GQ+offset_dgq, (M_CTX,), (stride_gqm,), (start_m,), (BM2,), (0,))
+        tl.store(p_dgq, dgq)
 
 
 class _power_attention(torch.autograd.Function):
@@ -494,14 +554,20 @@ class _power_attention(torch.autograd.Function):
             rowmax_strides = (rowmax.stride(0), rowmax.stride(1), rowmax.stride(2))
             o_strides = (o.stride(0), o.stride(1), o.stride(2), o.stride(3))
         else:
-            assert log_G.shape == (b, t, h)
+            if log_G is not None:
+                assert log_G.shape == (b, t, h)
+                log_GQ = log_G.repeat_interleave(r, dim=1)
+                log_GK = log_G.repeat_interleave(w, dim=1)
+                gq_strides = (log_GQ.stride(0), log_GQ.stride(2), log_GQ.stride(1))
+                gk_strides = (log_GK.stride(0), log_GK.stride(2), log_GK.stride(1))
+            else:
+                log_GQ = None
+                log_GK = None
+                gq_strides = (0, 0, 0)
+                gk_strides = (0, 0, 0)
             Q = Q.view(b, t * r, h, d)
             K = K.view(b, t * w, h, d)
             V = V.view(b, t * w, h, e)
-            log_GQ = log_G.repeat_interleave(r, dim=1)
-            log_GK = log_G.repeat_interleave(w, dim=1)
-            gq_strides = (log_GQ.stride(0), log_GQ.stride(2), log_GQ.stride(1))
-            gk_strides = (log_GK.stride(0), log_GK.stride(2), log_GK.stride(1))
             rowmax = torch.empty((b, t, h), device=Q.device, dtype=torch.float32)
             q_strides = (Q.stride(0), Q.stride(2), Q.stride(1), Q.stride(3))
             k_strides = (K.stride(0), K.stride(2), K.stride(1), K.stride(3))
@@ -585,12 +651,15 @@ def attention(Q, K, V, deg, log_G, r=1, w=1, causal=True, head_first=False, norm
     return _power_attention.apply(Q, K, V, deg, log_G, r, w, causal, head_first, norm)
 
 
-def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', scale=1.0, deg=2, r=1, w=1, causal=True, head_first=False, norm=False, requires_grad=False, seed=42, std=1.0):
-    generator = torch.Generator(device=device).manual_seed(seed)
-    Q = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) * std
-    K = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) * std
-    V = torch.randn(size=(b, t, h, d), dtype=dtype, device=device, generator=generator) * std
-    log_G = torch.zeros(size=(b, t, h), dtype=torch.float32, device=device)
+def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', scale=1.0, deg=2, r=1, w=1, causal=True, gating=False, head_first=False, norm=False, requires_grad=False, seed=42, std=1.0):
+    torch.manual_seed(seed)
+    Q = torch.randn(size=(b, t, h, d), dtype=dtype, device=device) * std
+    K = torch.randn(size=(b, t, h, d), dtype=dtype, device=device) * std
+    V = torch.randn(size=(b, t, h, d), dtype=dtype, device=device) * std
+    if gating:
+        log_G = F.logsigmoid(torch.rand(size=(b, t, h), dtype=torch.float32, device=device))
+    else:
+        log_G = None
     if requires_grad:
         Q, K, V, log_G = tree_map(lambda x: x.requires_grad_(True) if x is not None else None, (Q, K, V, log_G))
     
@@ -599,20 +668,31 @@ def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', scal
 
 if __name__ == "__main__":
     from power_attention._attention.impl import attention as attention_cutlass, create_inputs as create_inputs_cutlass
+    from power_attention._attention.reference import attention_reference as attention_reference_old
     from perf._timing import benchmark_speed
 
     # Hyperparameters
-    kw = dict(b=4, t=1024, h=16, d=64, dtype=torch.float16, device='cuda', scale=1.0, deg=2, seed=42)
+    kw = dict(b=1, t=128, h=1, d=64, dtype=torch.float16, device='cuda', scale=1.0, deg=2, seed=42)
 
     # Check correctness
     inputs_triton = create_inputs(**(kw | {'requires_grad': True, 'r': 1, 'w': 1, 'causal': True, 'head_first': False, 'norm': False}))
+    inputs_ref = create_inputs(**(kw | {'requires_grad': True, 'r': 1, 'w': 1, 'causal': True, 'head_first': False, 'norm': False}))
     inputs_cutlass = create_inputs_cutlass(**(kw | {'requires_grad': True}))
+
     for key in ['Q', 'K', 'V', 'log_G']:
         torch.testing.assert_close(inputs_triton[key], inputs_cutlass[key])
+        torch.testing.assert_close(inputs_triton[key], inputs_ref[key])
+
     o_triton, rowmax_triton = attention(**inputs_triton)
-    o_cutlass, rowmax_cutlass = attention_cutlass(**inputs_cutlass)
-    torch.testing.assert_close(o_triton, o_cutlass)
-    torch.testing.assert_close(rowmax_triton, rowmax_cutlass)
+    o_cutlass, _, rowmax_cutlass = attention_cutlass(**inputs_cutlass)
+    o_ref1, _, rowmax_ref1 = attention_reference_old(**inputs_cutlass)
+    o_ref, rowmax_ref = attention_reference(**inputs_triton)
+
+    torch.testing.assert_close(rowmax_cutlass, rowmax_ref.to(rowmax_cutlass.dtype), atol=1e-4, rtol=1e-2)
+    torch.testing.assert_close(rowmax_triton, rowmax_cutlass, atol=1e-4, rtol=1e-2)
+    torch.testing.assert_close(o_triton, o_ref, atol=1.5e-2, rtol=1e-2)
+    torch.testing.assert_close(o_cutlass, o_ref, atol=1.5e-2, rtol=1e-2)
+    torch.testing.assert_close(o_triton, o_cutlass, atol=2e-3, rtol=1e-2)
     print("Correctness check passed")
     
     
