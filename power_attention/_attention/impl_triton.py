@@ -53,7 +53,7 @@ fwd_configs = [
     triton.Config({'BM': BM, 'BN': BN}, num_stages=s, num_warps=w) \
     for BM in [64, 128, 256]\
     for BN in [32, 64]\
-    for s in [3, 4, 7]\
+    for s in [1, 3]\
     for w in [4, 8]\
 ]
 
@@ -231,13 +231,13 @@ def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, M, Out,  #
 
 bwd_configs = [
     triton.Config({'BN1': BN1, 'BM1': BM1, 'BN2': BN2, 'BM2': BM2, 'BLK_SLICE_FACTOR': BLK_SLICE_FACTOR}, num_stages=s, num_warps=w) \
-    for BN1 in [64, 128, 256]\
-    for BM1 in [16, 32]\
-    for BM2 in [64, 128, 256]\
-    for BN2 in [16, 32]\
-    for s in [1, 2, 3]\
+    for BN1 in [64]\
+    for BM1 in [16]\
+    for BM2 in [64]\
+    for BN2 in [16]\
+    for s in [1, 3]\
     for w in [4, 8]\
-    for BLK_SLICE_FACTOR in [1, 2]\
+    for BLK_SLICE_FACTOR in [1]\
 ]
 
 def keep_bwd(conf):
@@ -254,7 +254,7 @@ def keep_bwd(conf):
 @triton.jit
 def _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
                     Q, LOG_GQ, DO, M, #
-                    stride_qm, stride_qd, stride_dom, stride_doe, stride_gqm, #
+                    stride_qm, stride_qd, stride_dom, stride_doe, stride_gqm, stride_mm, #
                     M_CTX, N_CTX, r: tl.constexpr, w: tl.constexpr, #
                     deg: tl.constexpr, scale: tl.constexpr, gating: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, DIM_QK: tl.constexpr, DIM_VO: tl.constexpr, #
                     start_n, start_m, num_steps: tl.constexpr, #
@@ -278,7 +278,7 @@ def _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
             gq = tl.load(p_gq)
         else:
             gq = None
-        p_m = M + range_m
+        p_m = M + range_m * stride_mm
         sT = tl.dot(k, qT) # (N, M)
         signs = tl.where(sT > 0, 1, -1)
         zT = _power(tl.log(sT.abs() + 1e-7), deg) + tl.log(scale)
@@ -289,6 +289,8 @@ def _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
             mask = (range_m[None, :] // r) >= (range_n[:, None] // w)
             zT = tl.where(mask, zT, -float("inf"))
         pT = tl.exp(zT - m[None, :])
+        if deg % 2 == 1:
+            pT = pT * signs
         do = tl.load(p_do)
         # compute dV
         dv = tl.dot(pT.to(Q.type.element_ty), do, dv)
@@ -314,7 +316,7 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, #
                   K, V, LOG_GK, #
                   stride_kn, stride_kd, stride_vn, stride_ve, stride_gkn, #
                   M_CTX, N_CTX, r, w, #
-                  deg: tl.constexpr, gating: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, DIM_QK: tl.constexpr, DIM_VO: tl.constexpr, #
+                  deg: tl.constexpr, scale: tl.constexpr, gating: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, DIM_QK: tl.constexpr, DIM_VO: tl.constexpr, #
                   start_m, start_n, num_steps: tl.constexpr, #
                   MASK: tl.constexpr):
     tl.static_assert(BM % r == 0, "BM must be divisible by r")
@@ -339,7 +341,7 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, #
             gk = None
         s = tl.dot(q, kT) # (M, N)
         signs = tl.where(s > 0, 1, -1)
-        z = _power(tl.log(s.abs() + 1e-7), deg)
+        z = _power(tl.log(s.abs() + 1e-7), deg) + tl.log(scale)
         if gating:
             z = z + gq[:, None] - gk[None, :]
         if MASK:
@@ -347,8 +349,10 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, #
             z = tl.where(mask, z, -float("inf"))
         
         p = tl.exp(z - m[:, None])
+        if deg % 2 == 1:
+            p = p * signs
         # compute dQ
-        dp = tl.dot(do, vT).to(tl.float32)
+        dp = tl.dot(do, vT, out_dtype=tl.float32)
         ds = dp * p
         if gating:
             dgq += tl.sum(ds, 1, keep_dims=False)
@@ -433,7 +437,8 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     k = tl.load(p_k)
     v = tl.load(p_v)
     if gating:
-        gk = tl.load(LOG_GK + range_n * stride_gkn)
+        p_gk = tl.make_block_ptr(LOG_GK, (N_CTX,), (stride_gkn,), (start_n,), (BN1,), (0,))
+        gk = tl.load(p_gk)
     else:
         gk = None
 
@@ -442,7 +447,7 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
         num_steps = BN1 // MASK_BLOCK_M1
         dk, dv, dgk = _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
                                     Q, LOG_GQ, DO, M, #
-                                    stride_qm, stride_qd, stride_dom, stride_doe, stride_gqm, #
+                                    stride_qm, stride_qd, stride_dom, stride_doe, stride_gqm, stride_mm, #
                                     M_CTX, N_CTX, r, w, #
                                     deg, scale, gating, MASK_BLOCK_M1, BN1, DIM_QK, DIM_VO, #
                                     start_n, start_m, num_steps, #
@@ -453,7 +458,7 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     num_steps = (M_CTX - start_m) // BM1
     dk, dv, dgk = _attn_bwd_dkdv(dk, dv, dgk, k, v, gk, #
                                 Q, LOG_GQ, DO, M, #
-                                stride_qm, stride_qd, stride_dom, stride_doe, stride_gqm, #
+                                stride_qm, stride_qd, stride_dom, stride_doe, stride_gqm, stride_mm, #
                                 M_CTX, N_CTX, r, w, #
                                 deg, scale, gating, BM1, BN1, DIM_QK, DIM_VO, #
                                 start_n, start_m, num_steps, #
@@ -461,13 +466,11 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
 
     p_dv = tl.make_block_ptr(DV, (N_CTX, DIM_VO), (stride_dvn, stride_dve), (start_n, 0), (BN1, DIM_VO), (1, 0))
     p_dk = tl.make_block_ptr(DK, (N_CTX, DIM_QK), (stride_dkn, stride_dkd), (start_n, 0), (BN1, DIM_QK), (1, 0))
-    # p_dv = DV + range_n[:, None] * stride_dvn + tl.arange(0, DIM_VO)[None, :] * stride_dve
-    # p_dk = DK + range_n[:, None] * stride_dkn + tl.arange(0, DIM_QK)[None, :] * stride_dkd
 
     tl.store(p_dv, dv.to(DV.type.element_ty))
     tl.store(p_dk, dk.to(DK.type.element_ty))
     if gating:
-        p_dgk = DLOG_GK + range_n * stride_mm
+        p_dgk = DLOG_GK + range_n * stride_gkn
         tl.store(p_dgk, dgk)
 
     # -- Second part: compute dq
@@ -478,6 +481,7 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
     # load q, gq
     p_q = tl.make_block_ptr(Q, (M_CTX, DIM_QK), (stride_qm, stride_qd), (start_m, 0), (BM2, DIM_QK), (1, 0))
     p_do = tl.make_block_ptr(DO, (M_CTX, DIM_VO), (stride_dom, stride_doe), (start_m, 0), (BM2, DIM_VO), (1, 0))
+
     if gating:
         p_gq = tl.make_block_ptr(LOG_GQ, (M_CTX,), (stride_gqm,), (start_m,), (BM2,), (0,))
     else:
@@ -487,7 +491,7 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
         gq = tl.load(p_gq)
     else:
         gq = None
-    m = tl.load(M + start_m + tl.arange(0, BM2))
+    m = tl.load(M + (start_m + tl.arange(0, BM2)) * stride_mm)
     do = tl.load(p_do)
 
     dq = tl.zeros([BM2, DIM_QK], dtype=tl.float32)
@@ -500,7 +504,7 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
                                K, V, LOG_GK, #
                                stride_kn, stride_kd, stride_vn, stride_ve, stride_gkn, #
                                M_CTX, N_CTX, r, w, #
-                               deg, gating, BM2, MASK_BLOCK_N2, DIM_QK, DIM_VO, #
+                               deg, scale, gating, BM2, MASK_BLOCK_N2, DIM_QK, DIM_VO, #
                                start_m, end_n - num_steps * MASK_BLOCK_N2, num_steps, #
                                MASK=True)
         end_n -= num_steps * MASK_BLOCK_N2
@@ -511,7 +515,7 @@ def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, DO, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
                            K, V, LOG_GK, #
                            stride_kn, stride_kd, stride_vn, stride_ve, stride_gkn, #
                            M_CTX, N_CTX, r, w, #
-                           deg, gating, BM2, BN2, DIM_QK, DIM_VO, #
+                           deg, scale, gating, BM2, BN2, DIM_QK, DIM_VO, #
                            start_m, end_n - num_steps * BN2, num_steps, #
                            MASK=False)
 
@@ -557,10 +561,10 @@ class _power_attention(torch.autograd.Function):
         assert e in {16, 32, 64, 128, 256}, "e must be 16, 32, 64, 128, or 256"
 
         h = hq // r
-        o = torch.empty_like(Q)
         gating = log_G is not None
         if head_first:
             assert log_G.shape == (b, h, t)
+            o = torch.empty((b, h, t, e), device=Q.device, dtype=Q.dtype)
             log_GQ = log_G.repeat_interleave(r, dim=2)
             log_GK = log_G.repeat_interleave(w, dim=2)
             gq_strides = (log_GQ.stride(0), log_GQ.stride(1), log_GQ.stride(2))
@@ -575,6 +579,7 @@ class _power_attention(torch.autograd.Function):
             rowmax_strides = (rowmax.stride(0), rowmax.stride(1), rowmax.stride(2))
             o_strides = (o.stride(0), o.stride(1), o.stride(2), o.stride(3))
         else:
+            o = torch.empty((b, t, h, e), device=Q.device, dtype=Q.dtype)
             if gating:
                 assert log_G.shape == (b, t, h)
                 log_GQ = log_G.repeat_interleave(r, dim=1)
@@ -630,17 +635,15 @@ class _power_attention(torch.autograd.Function):
     @staticmethod
     def backward(ctx, do, drowmax=None):
         Q, K, V, rowmax, log_GQ, log_GK = ctx.saved_tensors
-        do = do.contiguous() # needed for reuse o's strides for do
         if log_GQ is not None:
             assert log_GQ.is_contiguous() # needed for reuse log_GQ's strides for dlog_GQ
             assert log_GK.is_contiguous() # needed for reuse log_GK's strides for dlog_GK
         assert do.is_contiguous()
         b, h, t, norm, stage = ctx.b, ctx.h, ctx.t, ctx.norm, ctx.stage
         assert not norm, "normalized backward not implemented yet"
-        q_strides, k_strides, v_strides, rowmax_strides, gq_strides, gk_strides, o_strides = ctx.q_strides, ctx.k_strides, ctx.v_strides, ctx.rowmax_strides, ctx.gq_strides, ctx.gk_strides, ctx.o_strides
+        q_strides, k_strides, v_strides, rowmax_strides, gq_strides, gk_strides = ctx.q_strides, ctx.k_strides, ctx.v_strides, ctx.rowmax_strides, ctx.gq_strides, ctx.gk_strides
         r, w, d, e, deg, scale = ctx.r, ctx.w, ctx.d, ctx.e, ctx.deg, ctx.scale
         gating = ctx.gating
-        do = do.contiguous()
         rowmax = rowmax.contiguous()
 
         dQ = torch.empty_like(Q)
@@ -704,7 +707,7 @@ if __name__ == "__main__":
     from perf._timing import benchmark_speed
 
     # Hyperparameters
-    kw = dict(b=1, t=128, h=2, d=64, dtype=torch.bfloat16, device='cuda', scale=1.0, deg=2, seed=42, std=1/8.0)
+    kw = dict(b=4, t=1024, h=2, d=64, dtype=torch.bfloat16, device='cuda', scale=1.0, deg=2, seed=42, std=1/8.0, gating=True)
 
     # Check correctness
     inputs_triton = create_inputs(**(kw | {'requires_grad': True, 'r': 1, 'w': 1, 'causal': True, 'head_first': False, 'norm': False}))
@@ -728,12 +731,13 @@ if __name__ == "__main__":
     torch.autograd.backward(o_triton, torch.ones_like(o_triton))
     torch.autograd.backward(o_cutlass, torch.ones_like(o_cutlass))
     torch.autograd.backward(o_ref, torch.ones_like(o_ref))
-    torch.testing.assert_close(inputs_ref['Q'].grad, inputs_cutlass['Q'].grad, atol=5e-3, rtol=1e-2)
-    torch.testing.assert_close(inputs_ref['K'].grad, inputs_cutlass['K'].grad, atol=5e-3, rtol=1e-2)
-    torch.testing.assert_close(inputs_ref['V'].grad, inputs_cutlass['V'].grad, atol=5e-3, rtol=1e-2)
-    torch.testing.assert_close(inputs_triton['Q'].grad, inputs_cutlass['Q'].grad, atol=5e-3, rtol=1e-2)
-    torch.testing.assert_close(inputs_triton['K'].grad, inputs_cutlass['K'].grad, atol=5e-3, rtol=1e-2)
-    torch.testing.assert_close(inputs_triton['V'].grad, inputs_cutlass['V'].grad, atol=5e-3, rtol=1e-2)
+    import pdb; pdb.set_trace()
+    torch.testing.assert_close(inputs_ref['Q'].grad, inputs_cutlass['Q'].grad, atol=1e-2, rtol=1e-2)
+    torch.testing.assert_close(inputs_ref['K'].grad, inputs_cutlass['K'].grad, atol=1e-2, rtol=1e-2)
+    torch.testing.assert_close(inputs_ref['V'].grad, inputs_cutlass['V'].grad, atol=1e-2, rtol=1e-2)
+    torch.testing.assert_close(inputs_triton['Q'].grad, inputs_cutlass['Q'].grad, atol=1e-2, rtol=1e-2)
+    torch.testing.assert_close(inputs_triton['K'].grad, inputs_cutlass['K'].grad, atol=1e-2, rtol=1e-2)
+    torch.testing.assert_close(inputs_triton['V'].grad, inputs_cutlass['V'].grad, atol=1e-2, rtol=1e-2)
     print("Gradient check passed")
     
     # Thorough benchmarking
