@@ -52,7 +52,7 @@ def inspect_diff_details(gold, ref, test, tol, atol=0, num_vals=10):
             gold = [gold[k] for k in keys]
             ref = [ref[k] for k in keys]
             test = [test[k] for k in keys]
-        msgs = zip(*[inspect_diff_details(g, r, t, tol, atol) for g, r, t in zip(gold, ref, test)])
+        msgs = [inspect_diff_details(g, r, t, tol, atol) for g, r, t in zip(gold, ref, test)]
         msg = """\nDiff details:\n"""
         for i, imsg in enumerate(msgs):
             msg += f"\n\tElement {i}/{len(msgs)}:\n\t\t{imsg}"
