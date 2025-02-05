@@ -200,7 +200,7 @@ def expand_reference(K, deg):
 
 def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, device='cuda', seed=42, requires_grad=False):
     torch.manual_seed(seed)
-    K = torch.ones(size=(b, n, c, h, d), dtype=dtype, device=device) / d**.25
+    K = torch.randn(size=(b, n, c, h, d), dtype=dtype, device=device) / d**.25
     if requires_grad:
         K = K.requires_grad_(True)
     return dict(K=K, deg=2)
