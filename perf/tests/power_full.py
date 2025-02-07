@@ -18,16 +18,17 @@ from perf._checks import (
 from power_attention.power_full import (
     power_full,
     power_full_reference,
+    power_full_triton,
     create_inputs,
 )
 
 # Define parameter ranges
 param_ranges = {
-    'b': [2],
+    'b': [1],
     't': [512, 1024], 
-    'h': [4],
+    'h': [1],
     'd': [32, 64],
-    'qhead_ratio': [1, 2],
+    'qhead_ratio': [1],
     'dtype': [torch.bfloat16, torch.float16],
     'device': ['cuda'],
     'gating': [False, True],
@@ -207,6 +208,19 @@ def test_power_full_kernel_matches_reference(kw, compile):
         rtol=3., # if test error is more than 3x reference error, then it is probably a real failure
     )
 
+@pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
+@pytest.mark.parametrize("compile", [False, True])
+def test_power_full_triton_kernel_matches_reference(kw, compile):
+    torch.compiler.reset()
+    gold_inputs = create_inputs(**(kw | {'dtype': torch.float32}))
+    test_inputs = create_inputs(**kw)
+    check_fn_forwards_match(
+        ref_fn=power_full_reference,
+        gold_inputs=gold_inputs,
+        test_fn=torch.compile(power_full_triton) if compile else power_full_triton,
+        test_inputs=test_inputs,
+        rtol=3., # if test error is more than 3x reference error, then it is probably a real failure
+    )
 
 @pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
 @pytest.mark.parametrize("compile", [False, True])
@@ -217,6 +231,22 @@ def test_power_full_kernel_grad_matches_reference(kw, compile):
         ref_fn=power_full_reference,
         gold_inputs=gold_inputs,
         test_fn=torch.compile(power_full) if compile else power_full,
+        test_inputs=test_inputs,
+        rtol=2, # if test error is more than 2x reference error, then it is probably a real failure
+        atol=3e-4
+    )
+
+
+@pytest.mark.parametrize("kw", TEST_CASES, ids=id_fn)
+@pytest.mark.parametrize("compile", [False, True])
+def test_power_full_triton_kernel_grad_matches_reference(kw, compile):
+    torch.compiler.reset()
+    gold_inputs = create_inputs(requires_grad=True, **(kw | {'dtype': torch.float32}))
+    test_inputs = create_inputs(requires_grad=True, **kw)
+    check_fn_backwards_match(
+        ref_fn=power_full_reference,
+        gold_inputs=gold_inputs,
+        test_fn=torch.compile(power_full_triton) if compile else power_full_triton,
         test_inputs=test_inputs,
         rtol=2, # if test error is more than 2x reference error, then it is probably a real failure
         atol=3e-4

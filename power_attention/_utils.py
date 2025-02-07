@@ -1,5 +1,5 @@
 import torch
-from math import floor, ceil
+from math import floor, ceil, log
 from functools import partial
 from power_attention_cuda import InnerBlock_DT, OuterBlock_DT
 
@@ -30,6 +30,25 @@ def layernorm(x, eps=None):
     elif eps is None:
         eps = 0.0
     return ((o - o.mean(-1, keepdim=True)) / (o.std(-1, keepdim=True, correction=False) + eps)).to(x.dtype)
+
+def unscale_ballnorm(x, log_scale):
+    """Ballnorm along the last dimension.
+    Anything outside the radius of the 1-ball gets projected onto its surface. Inside is left unchanged.
+    The x is assumed to be pre-scaled for stability by the exp(-log_scale) (meaning the "true" value is x * exp(log_scale)),
+    so we take this into account when deciding whether or not to project.
+    """
+
+    assert len(log_scale.shape) == len(x.shape), f"log_scale.shape: {log_scale.shape}, x.shape: {x.shape}"
+    assert log_scale.shape[:-1] == x.shape[:-1], f"log_scale.shape: {log_scale.shape}, x.shape: {x.shape}"
+    assert log_scale.shape[-1] == 1, f"log_scale.shape: {log_scale.shape}"
+
+    o = x.float()
+    mean = o.mean(-1, keepdim=True)
+    std = o.std(-1, keepdim=True, correction=False)
+    y = torch.where(torch.log(std) + log_scale > log(1.0),
+                    (o - mean) / std,              # outside the ball, project onto its surface
+                    o * torch.exp(log_scale))      # inside the ball, leave unchanged but undo effect of log_scale
+    return y.to(x.dtype)
 
 # Credit: https://github.com/pytorch/pytorch/issues/64947#issuecomment-2304371451
 def torch_quantile(

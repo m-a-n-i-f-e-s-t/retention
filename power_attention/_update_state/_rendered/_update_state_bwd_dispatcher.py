@@ -8,9 +8,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                       stride_dkb, stride_dkt, stride_dkh, stride_dkd,
                       stride_dvb, stride_dvt, stride_dvh, stride_dve,
                       T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
-                      block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr, V_IN_REGS: tl.constexpr):
+                      block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_T: tl.constexpr, V_IN_REGS: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
-    if ((BLOCK_D == 16) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((block1 == 16)))))) or (((BLOCK_D == 16) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((block1 == 16)))))) or (((BLOCK_D == 16) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((block1 == 16)))))) or ((BLOCK_D == 16) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((block1 == 16)))))))):
+    if ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((block1 == 16))))) or ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((block1 == 16))))):
         
         if (d == 32):     
             tl.static_assert(block1 >= block2 and block1 % block2 == 0)
@@ -18,7 +18,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             off_b = off_bh // H
             off_h = off_bh % H
             off_t = tl.program_id(1)
-            off_e = tl.program_id(2)
             
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
@@ -27,10 +26,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
-            dv = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+            dv = tl.zeros((BLOCK_T, e), dtype=tl.float32)
             dk_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             mask_T = range_t < T
@@ -47,11 +46,11 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
-                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
-                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x e
                     
                     if not V_IN_REGS:
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
@@ -89,7 +88,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             off_b = off_bh // H
             off_h = off_bh % H
             off_t = tl.program_id(1)
-            off_e = tl.program_id(2)
             
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
@@ -98,10 +96,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
-            dv = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+            dv = tl.zeros((BLOCK_T, e), dtype=tl.float32)
             dk_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_2 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -120,11 +118,11 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
-                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
-                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x e
                     
                     if not V_IN_REGS:
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
@@ -176,7 +174,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             off_b = off_bh // H
             off_h = off_bh % H
             off_t = tl.program_id(1)
-            off_e = tl.program_id(2)
             
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
@@ -185,10 +182,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
-            dv = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+            dv = tl.zeros((BLOCK_T, e), dtype=tl.float32)
             dk_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_2 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -211,11 +208,11 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
-                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
-                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x e
                     
                     if not V_IN_REGS:
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
@@ -288,7 +285,7 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             tl.store(p_dv, dv, mask=mask_T[:, None])
                 
                 
-    elif ((BLOCK_D == 32) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((block1 == 16)))))) or (((BLOCK_D == 32) and ((BLOCK_E == 32) and ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((block1 == 16)))))) or (((BLOCK_D == 32) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((block1 == 16)))))) or ((BLOCK_D == 32) and ((BLOCK_E == 64) and ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((block1 == 16)))))))):
+    elif ((BLOCK_D == 32) and ((BLOCK_T == 128) and ((V_IN_REGS == False) and ((block1 == 16))))) or ((BLOCK_D == 32) and ((BLOCK_T == 128) and ((V_IN_REGS == True) and ((block1 == 16))))):
         
         if (d == 32):     
             tl.static_assert(block1 >= block2 and block1 % block2 == 0)
@@ -296,7 +293,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             off_b = off_bh // H
             off_h = off_bh % H
             off_t = tl.program_id(1)
-            off_e = tl.program_id(2)
             
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
@@ -305,10 +301,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
-            dv = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+            dv = tl.zeros((BLOCK_T, e), dtype=tl.float32)
             dk_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             mask_T = range_t < T
@@ -325,17 +321,17 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
-                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd # BLOCK_T
-                    p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
-                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     k_d2_1 = tl.load(p_k_d2_1, mask=mask_T, other=0.) # BLOCK_T
-                    ds_1 = (tl.load(p_ds_1) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_1 = (tl.load(p_ds_1) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x e
                     phik_1 = k_d1 * (k_d2_1[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_1.to(K.dtype.element_ty), ds_1, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_1.to(K.dtype.element_ty), ds_1, dv) # BLOCK_T x e
                     
                     if not V_IN_REGS:
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
@@ -386,7 +382,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             off_b = off_bh // H
             off_h = off_bh % H
             off_t = tl.program_id(1)
-            off_e = tl.program_id(2)
             
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
@@ -395,10 +390,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
-            dv = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+            dv = tl.zeros((BLOCK_T, e), dtype=tl.float32)
             dk_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_2 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -417,17 +412,17 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
-                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd # BLOCK_T
-                    p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
-                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     k_d2_1 = tl.load(p_k_d2_1, mask=mask_T, other=0.) # BLOCK_T
-                    ds_1 = (tl.load(p_ds_1) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_1 = (tl.load(p_ds_1) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x e
                     phik_1 = k_d1 * (k_d2_1[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_1.to(K.dtype.element_ty), ds_1, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_1.to(K.dtype.element_ty), ds_1, dv) # BLOCK_T x e
                     
                     if not V_IN_REGS:
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
@@ -502,7 +497,6 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             off_b = off_bh // H
             off_h = off_bh % H
             off_t = tl.program_id(1)
-            off_e = tl.program_id(2)
             
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
@@ -511,10 +505,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve
-            dv = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+            dv = tl.zeros((BLOCK_T, e), dtype=tl.float32)
             dk_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dk_2 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -537,17 +531,17 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_d2 = tl.multiple_of(off_d2, block2)
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
-                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd # BLOCK_T
-                    p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x BLOCK_E
+                    p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
-                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     k_d2_1 = tl.load(p_k_d2_1, mask=mask_T, other=0.) # BLOCK_T
-                    ds_1 = (tl.load(p_ds_1) * multiplier).to(K.dtype.element_ty) # block1 x BLOCK_E
+                    ds_1 = (tl.load(p_ds_1) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_0.to(K.dtype.element_ty), ds_0, dv) # BLOCK_T x e
                     phik_1 = k_d1 * (k_d2_1[:, None]) # BLOCK_T x block1
-                    dv = tl.dot(phik_1.to(K.dtype.element_ty), ds_1, dv) # BLOCK_T x BLOCK_E
+                    dv = tl.dot(phik_1.to(K.dtype.element_ty), ds_1, dv) # BLOCK_T x e
                     
                     if not V_IN_REGS:
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)

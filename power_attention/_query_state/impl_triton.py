@@ -1,13 +1,13 @@
 import torch
 import triton
 import triton.language as tl
-from math import comb
+from math import comb, log
 from power_attention.kernelgen import kernelgen
 
 def prune_configs(configs, nargs, **kwargs):
     pruned_configs = []
     for config in configs:
-        if config.kwargs["BLOCK_E"] <= nargs["e"] and config.kwargs["BLOCK_D"] <= nargs["D"] and config.kwargs["BLOCK_T"] <= nargs["c"]:
+        if config.kwargs.get("BLOCK_E", 0) <= nargs["e"] and config.kwargs["BLOCK_D"] <= nargs["D"] and config.kwargs["BLOCK_T"] <= nargs["c"]:
             pruned_configs.append(config)
     return pruned_configs
 
@@ -18,7 +18,7 @@ fwd_configs = [
     for BE in [32, 64]
     for BT in [128, 256]
     for nw in [4, 8]
-    for ns in [1, 3, 5, 7]
+    for ns in [1, 3]
 ]
 
 @triton.jit
@@ -47,7 +47,7 @@ def get_offsets_p2(off_D, d, block1, block_D):
 @triton.autotune(fwd_configs, key=["deg", "d", "e", "D"], prune_configs_by={'early_config_prune': prune_configs})
 @triton.jit
 @kernelgen(fwd_configs)
-def _query_state_fwd(Q, S, Y, M, O, deg: tl.constexpr, scale, zero_initial_state: tl.constexpr,
+def _query_state_fwd(Q, S, Y, M, O, deg: tl.constexpr, scale, zero_initial_state,
                      stride_qb, stride_qt, stride_qh, stride_qd,
                      stride_sb, stride_sh, stride_sD, stride_se,
                      stride_yb, stride_yt, stride_yh, stride_ye,
@@ -60,6 +60,7 @@ def _query_state_fwd(Q, S, Y, M, O, deg: tl.constexpr, scale, zero_initial_state
     """
     <kernelgen>
 block2: tl.constexpr = BLOCK_D // block1
+BLOCK_E_VALID: tl.constexpr = e if e < BLOCK_E else BLOCK_E
 {% set block2 = BLOCK_D // block1 -%}
 tl.static_assert(block1 >= block2 and block1 % block2 == 0)
 off_bnh = tl.program_id(0)
@@ -76,14 +77,13 @@ if Y is not None:
     M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
 
 range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
 range_d1 = tl.arange(0, block1).to(tl.int64)
 p_s = S + tl.arange(0, BLOCK_D)[:, None] * stride_sD + range_e[None, :] * stride_se
 
-y = tl.zeros((BLOCK_T, BLOCK_E), dtype=tl.float32)
+y = tl.zeros((BLOCK_T, BLOCK_E_VALID), dtype=tl.float32)
 mask_T = range_t < c
 
-m, n = 0, 0
 for m in range(0, d//block1):
     p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
     q_d1 = tl.load(p_q_d1, mask=mask_T[:, None], other=0.) # BLOCK_T x block1
@@ -94,7 +94,7 @@ for m in range(0, d//block1):
         off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
         {% for i in range(block2) -%}
         p_q_d2_{{i}} = Q + range_t[:] * stride_qt + (off_d2 + {{i}}) * stride_qd # BLOCK_T
-        p_s_{{i}} = S + (range_d1[:, None] + off_D + {{i}} * block1) * stride_sD + range_e[None, :] * stride_se # block1 x BLOCK_E
+        p_s_{{i}} = S + (range_d1[:, None] + off_D + {{i}} * block1) * stride_sD + range_e[None, :] * stride_se # block1 x BLOCK_E_VALID
         {% endfor -%}
 
         {% for i in range(block2) -%}
@@ -102,16 +102,16 @@ for m in range(0, d//block1):
         {% endfor -%}
         {% for i in range(block2) -%}
         phik_{{i}} = q_d1 * (q_d2_{{i}}[:, None]) # BLOCK_T x block1
-        s_{{i}} = tl.load(p_s_{{i}}) # block1 x BLOCK_E
+        s_{{i}} = tl.load(p_s_{{i}}) # block1 x BLOCK_E_VALID
         if scale != 1.0:
-            s_{{i}} = (s_{{i}} * scale).to(Q.dtype.element_ty) # block1 x BLOCK_E
+            s_{{i}} = (s_{{i}} * scale).to(Q.dtype.element_ty) # block1 x BLOCK_E_VALID
         {% endfor -%}
 
         {% for i in range(block2) -%}
-        y = tl.dot(phik_{{i}}.to(Q.dtype.element_ty), s_{{i}}, y) # BLOCK_T x BLOCK_E
+        y = tl.dot(phik_{{i}}.to(Q.dtype.element_ty), s_{{i}}, y) # BLOCK_T x BLOCK_E_VALID
         {% endfor %}
 
-chunk_id = off_bn % n
+chunk_id = (tl.program_id(0) // h) % n
 if Y is not None:
     p_y_attn = Y + range_t[:, None] * stride_yt + range_e[None, :] * stride_ye
     p_m = M + range_t * stride_mt
@@ -119,11 +119,12 @@ if Y is not None:
     y_attn = tl.load(p_y_attn, mask=mask_T[:, None], other=0.).to(tl.float32)
     exp_neg_m = tl.exp(-rowmax)
     min_scale = tl.minimum(scale, exp_neg_m)
-    y_attn = y_attn * (min_scale / exp_neg_m)[:, None]
-    if (chunk_id > 0 or (not zero_initial_state)):
-        o = y * ((min_scale / scale)[:, None]) + y_attn
+    if zero_initial_state:
+        if chunk_id > 0:
+            y_attn = y_attn * (min_scale / exp_neg_m)[:, None]
     else:
-        o = y
+        y_attn = y_attn * (min_scale / exp_neg_m)[:, None]
+    o = y * ((min_scale / scale)[:, None]) + y_attn
 else:
     o = y
 
@@ -136,13 +137,12 @@ tl.store(p_o, o.to(O.dtype.element_ty), mask=mask_T[:, None])
 
 
 dQ_bwd_configs = [
-    triton.Config({'block1': block1, 'BLOCK_T': BT, 'BLOCK_D': BD, 'BLOCK_E': BE}, num_warps=nw, num_stages=ns)
+    triton.Config({'block1': block1, 'BLOCK_T': BT, 'BLOCK_D': BD}, num_warps=nw, num_stages=ns)
     for block1 in [16]
     for BT in [128, 256]
     for BD in [16, 32]
-    for BE in [32, 64]
     for nw in [4, 8]
-    for ns in [1, 3, 5, 7]
+    for ns in [1, 3]
 ]
 
 @triton.autotune(dQ_bwd_configs, key=["deg", "d", "e", "D"], prune_configs_by={'early_config_prune': prune_configs})
@@ -157,7 +157,7 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                      stride_dqb, stride_dqt, stride_dqh, stride_dqd,
                      n, h, c, d: tl.constexpr, D: tl.constexpr, e: tl.constexpr,
                      block1: tl.constexpr, BLOCK_T: tl.constexpr, 
-                     BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr):
+                     BLOCK_D: tl.constexpr):
     """
     This kernel will compute dQ.
     qs_factor = tl.minimum(tl.exp(-m)/scale, 1.0)
@@ -173,7 +173,6 @@ off_bnh = tl.program_id(0)
 off_bn = off_bnh // h
 off_h = off_bnh % h
 off_t = tl.program_id(1)
-off_e = tl.program_id(2)
 
 Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
 S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
@@ -181,30 +180,35 @@ dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
 dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
 
 range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
-range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+range_e = tl.arange(0, e).to(tl.int64)
 range_d1 = tl.arange(0, block1)
-p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
-do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
-if M is not None:
+p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
+do = tl.load(p_do) # [BLOCK_T x e]
+
+if dY_attn is not None:
     M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
     p_m = M + range_t * stride_mt
     rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
-    qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-    do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
-{% for j in range(d//block1) -%}
-dq_{{j}} = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-{% endfor -%}
 
-if dY_attn is not None:
     chunk_id = off_bn % n
     dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-    p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x BLOCK_E]
-    if chunk_id > 0 or (not zero_initial_state):
+    p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+    if (chunk_id > 0 or (not zero_initial_state)):
         attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
         dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
         tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
     else:
         tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
+
+    qs_factor = tl.minimum(tl.exp(-rowmax), scale)
+    do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+else:
+    do = (do * scale).to(Q.dtype.element_ty)
+
+{% for j in range(d//block1) -%}
+dq_{{j}} = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
+{% endfor -%}
+
 
 for m in range(0, d//block1):
     p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
@@ -217,12 +221,12 @@ for m in range(0, d//block1):
         off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
         {% for i in range(block2) %}
         p_q_d2_{{i}} = Q + range_t[:] * stride_qt + (off_d2 + {{i}}) * stride_qd # [BLOCK_T]
-        p_sT_{{i}} = S + (range_d1[None, :] + off_D + {{i}} * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E x block1]
+        p_sT_{{i}} = S + (range_d1[None, :] + off_D + {{i}} * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
         {% endfor -%}
 
         {% for i in range(block2) -%}
         q_d2_{{i}} = tl.load(p_q_d2_{{i}}, mask=(range_t < c), other=0.) # [BLOCK_T]
-        sT_{{i}} = tl.load(p_sT_{{i}}) # [BLOCK_E x block1]
+        sT_{{i}} = tl.load(p_sT_{{i}}) # [BLOCK_E_VALID x block1]
         {% endfor -%}
 
         {% for i in range(block2) %}
@@ -268,7 +272,7 @@ dS_bwd_configs = [
     for BD in [128, 256]
     for BE in [32, 64]
     for nw in [4, 8]
-    for ns in [1, 3, 5, 7]
+    for ns in [1, 3]
 ]
 
 @triton.autotune(dS_bwd_configs, key=["deg", "d", "e", "D"], prune_configs_by={'early_config_prune': prune_configs})
@@ -291,6 +295,7 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
 
     <kernelgen d=(32, 64, 128)>
 block2: tl.constexpr = BLOCK_D // block1
+BLOCK_E_VALID: tl.constexpr = e if e < BLOCK_E else BLOCK_E
 {% set block2 = BLOCK_D // block1 -%}
 off_bnh = tl.program_id(0)
 off_bn = off_bnh // h
@@ -306,12 +311,17 @@ dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
 dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
 if M is not None:
     M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+    chunk_id = off_bn % n
+    if zero_initial_state and chunk_id == 0:
+        p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+        tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+        return
 
 range_t = tl.arange(0, BLOCK_T).to(tl.int64)
 range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
 p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
 
 {% set block2 = BLOCK_D // block1 -%}
 {% for i in range(block2) -%}
@@ -319,7 +329,7 @@ p_q_d2_{{i}} = Q + range_t[:] * stride_qt + (off_d2 + {{i}}) * stride_qd # [BLOC
 {% endfor -%}
 
 {% for i in range(block2) -%}
-ds_{{i}} = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+ds_{{i}} = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
 {% endfor -%}
 
 for tid in range(0, tl.cdiv(c, BLOCK_T)):
@@ -327,7 +337,7 @@ for tid in range(0, tl.cdiv(c, BLOCK_T)):
         p_m = M + (range_t + tid * BLOCK_T) * stride_mt
         rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
     qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-    do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+    do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
     {% for i in range(block2) -%}
     q_d2_{{i}} = tl.load(p_q_d2_{{i}}) # BLOCK_T
     phiqT_{{i}} = qT_d1 * q_d2_{{i}}[None, :] # [block1 x BLOCK_T]
@@ -336,9 +346,11 @@ for tid in range(0, tl.cdiv(c, BLOCK_T)):
     if M is not None:
         qs_factor = tl.minimum(tl.exp(-rowmax), scale)
         do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+    else:
+        do = (do * scale).to(Q.dtype.element_ty)
 
     {% for i in range(block2) -%}
-    ds_{{i}} = tl.dot(phiqT_{{i}}, do, ds_{{i}}) # [block1 x BLOCK_E]
+    ds_{{i}} = tl.dot(phiqT_{{i}}, do, ds_{{i}}) # [block1 x BLOCK_E_VALID]
     {% endfor -%}
     p_do += BLOCK_T * stride_dot
     p_qT_d1 += BLOCK_T * stride_qt
@@ -399,6 +411,9 @@ class _query_state(torch.autograd.Function):
         fused = Y is not None
         assert fused == (rowmax is not None), "Y and rowmax must both be None or both be not None"
 
+        # TODO (sean): scale really is a divisor when passed in, but we treat it as a multiplier here
+        scale = 1 / scale if scale is not None else None
+
         stride_qb, stride_qt, stride_qh, stride_qd = Q.stride()
         stride_sb, stride_sh, stride_sD, stride_sd = S.stride()
         stride_yb, stride_yt, stride_yh, stride_ye = Y.stride() if Y is not None else (0, 0, 0, 0)
@@ -407,7 +422,7 @@ class _query_state(torch.autograd.Function):
         
         grid = lambda args: (b*n*h, triton.cdiv(c, args["BLOCK_T"]), triton.cdiv(e, args["BLOCK_E"]))
         _query_state_fwd[grid](
-            Q, S, Y, rowmax, O, deg, scale or 1.0, zero_initial_state or False,
+            Q, S, Y, rowmax, O, deg, scale or 1.0, zero_initial_state,
             stride_qb, stride_qt, stride_qh, stride_qd,
             stride_sb, stride_sh, stride_sD, stride_sd,
             stride_yb, stride_yt, stride_yh, stride_ye,
@@ -420,7 +435,7 @@ class _query_state(torch.autograd.Function):
         ctx.save_for_backward(Q, S, rowmax)
         ctx.deg = deg
         ctx.scale = scale or 1.0
-        ctx.zero_initial_state = zero_initial_state or False
+        ctx.zero_initial_state = zero_initial_state
         ctx.b = b
         ctx.n = n
         ctx.c = c
@@ -460,7 +475,7 @@ class _query_state(torch.autograd.Function):
         stride_mb, stride_mt, stride_mh = rowmax.stride() if rowmax is not None else (0, 0, 0)
         stride_dob, stride_dot, stride_doh, stride_doe = dO.stride()
 
-        grid1 = lambda args: (b*n*h, triton.cdiv(c, args["BLOCK_T"]), triton.cdiv(e, args["BLOCK_E"]))
+        grid1 = lambda args: (b*n*h, triton.cdiv(c, args["BLOCK_T"]))
         _query_state_bwd_dQ[grid1](
             Q, S, rowmax, dO, dQ, dY_attn, deg, scale or 1.0, zero_initial_state,
             stride_qb, stride_qt, stride_qh, stride_qd,
@@ -495,7 +510,7 @@ if __name__ == "__main__":
     from perf._timing import benchmark_speed
 
     # Hyperparameters
-    kw = dict(b=4, n=16, c=128, h=12, d=64, fused=True)
+    kw = dict(b=1, n=4, c=128, h=1, d=32, fused=False, scale=2560.0, zero_initial_state=True)
 
     # Check correctness
     inputs_triton = create_inputs(**(kw | dict(requires_grad=True)))
@@ -508,9 +523,10 @@ if __name__ == "__main__":
     # Check gradients
     torch.autograd.backward(output_triton, torch.ones_like(output_triton))
     torch.autograd.backward(output_cutlass, torch.ones_like(output_cutlass))
-    torch.testing.assert_close(inputs_triton['Q'].grad, inputs_cutlass['Q'].grad, atol=1e-4, rtol=1e-2)
-    torch.testing.assert_close(inputs_triton['Y'].grad, inputs_cutlass['Y'].grad, atol=1e-4, rtol=1e-2)
     torch.testing.assert_close(inputs_triton['S'].grad, inputs_cutlass['S'].grad, atol=1e-4, rtol=1e-2)
+    torch.testing.assert_close(inputs_triton['Q'].grad, inputs_cutlass['Q'].grad, atol=1e-4, rtol=1e-2)
+    if inputs_triton['Y'] is not None:
+        torch.testing.assert_close(inputs_triton['Y'].grad, inputs_cutlass['Y'].grad, atol=1e-4, rtol=1e-2)
     print("Gradient check passed")
 
     # Thorough benchmarking

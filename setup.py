@@ -93,6 +93,8 @@ ALL_CUDA_SOURCES = [
     'csrc/power_attention/src/discumsum_bwd_bf16_sm80.cu',
     'csrc/power_attention/src/discumsum_bwd_fp16_sm80.cu',
     'csrc/power_attention/src/discumsum_bwd_fp32_sm80.cu',
+    # mosaic
+    'csrc/power_attention/src/mosaic/mosaic_binding.cu',
 ]
 
 def get_cuda_sources():
@@ -270,6 +272,7 @@ ext_modules.append(
             Path(this_dir) / 'csrc' / 'power_attention',
             Path(this_dir) / 'csrc' / 'power_attention' / 'src',
             Path(this_dir) / 'csrc' / 'power_attention' / 'src' / 'attention',
+            Path(this_dir) / 'csrc' / 'power_attention' / 'src' / 'mosaic',
             Path(this_dir) / 'csrc' / 'cutlass' / 'include',
             Path(this_dir) / 'csrc' / 'cutlass' / 'tools' / 'include',
         ],

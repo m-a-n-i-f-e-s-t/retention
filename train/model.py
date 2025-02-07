@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from power_attention import power_full
+from power_attention import power_full, power_full_triton
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
@@ -43,7 +43,7 @@ class CausalSelfAttention(nn.Module):
         self.head_size = config.head_size
         self.qhead_ratio = config.qhead_ratio
         self.log_space = config.log_space
-        self.gating = self.attention_kernel == 'power' and not config.disable_gating
+        self.gating = self.attention_kernel in ('power', 'power_triton') and not config.disable_gating
         # key, query, value projections for all heads, but in a batch
         self.qkv_size = (config.qhead_ratio + 2) * self.n_head * self.head_size
         self.gating_size = config.n_head if self.gating else 0
@@ -96,6 +96,11 @@ class CausalSelfAttention(nn.Module):
             y = y.transpose(1, 2) # (B, T, nh, hs)
         elif self.attention_kernel == 'power':
             y = power_full(q.contiguous(), k.contiguous(), v.contiguous(), log_g,
+                deg=self.degree,
+                scale=1.0 / d**0.5,
+                chunk_size=self.chunk_size)
+        elif self.attention_kernel == 'power_triton':
+            y = power_full_triton(q.contiguous(), k.contiguous(), v.contiguous(), log_g,
                 deg=self.degree,
                 scale=1.0 / d**0.5,
                 chunk_size=self.chunk_size)

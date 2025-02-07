@@ -8,6 +8,7 @@ def _update_state_fwd(K, V, S, deg: tl.constexpr,
                      T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
                      block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr, BLOCK_T: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
+    BLOCK_E_VALID: tl.constexpr = e if e < BLOCK_E else BLOCK_E
     if ((BLOCK_D == 128) and ((BLOCK_E == 32) and ((BLOCK_T == 16) and ((block1 == 16))))) or (((BLOCK_D == 128) and ((BLOCK_E == 32) and ((BLOCK_T == 32) and ((block1 == 16))))) or (((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 16) and ((block1 == 16))))) or ((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 32) and ((block1 == 16))))))):
         
         off_bh = tl.program_id(0)
@@ -25,26 +26,26 @@ def _update_state_fwd(K, V, S, deg: tl.constexpr,
         
         range_t = tl.arange(0, BLOCK_T).to(tl.int64)
         range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-        range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+        range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
         p_k_d1 = K + range_d1[:, None] * stride_kd + range_t[None, :] * stride_kt # [block1 x BLOCK_T]
-        p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve # [BLOCK_T x BLOCK_E]
+        p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve # [BLOCK_T x BLOCK_E_VALID]
         
         p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd
-        s_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd
-        s_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_2 = K + range_t[:] * stride_kt + (off_d2 + 2) * stride_kd
-        s_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_3 = K + range_t[:] * stride_kt + (off_d2 + 3) * stride_kd
-        s_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_4 = K + range_t[:] * stride_kt + (off_d2 + 4) * stride_kd
-        s_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_5 = K + range_t[:] * stride_kt + (off_d2 + 5) * stride_kd
-        s_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_6 = K + range_t[:] * stride_kt + (off_d2 + 6) * stride_kd
-        s_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_7 = K + range_t[:] * stride_kt + (off_d2 + 7) * stride_kd
-        s_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         for tid in range(0, tl.cdiv(T, BLOCK_T)):
             k_d1 = tl.load(p_k_d1) # block1 x BLOCK_T
             v = tl.load(p_v)
@@ -126,42 +127,42 @@ def _update_state_fwd(K, V, S, deg: tl.constexpr,
         
         range_t = tl.arange(0, BLOCK_T).to(tl.int64)
         range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-        range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+        range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
         p_k_d1 = K + range_d1[:, None] * stride_kd + range_t[None, :] * stride_kt # [block1 x BLOCK_T]
-        p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve # [BLOCK_T x BLOCK_E]
+        p_v = V + range_t[:, None] * stride_vt + range_e[None, :] * stride_ve # [BLOCK_T x BLOCK_E_VALID]
         
         p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd
-        s_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd
-        s_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_2 = K + range_t[:] * stride_kt + (off_d2 + 2) * stride_kd
-        s_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_3 = K + range_t[:] * stride_kt + (off_d2 + 3) * stride_kd
-        s_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_4 = K + range_t[:] * stride_kt + (off_d2 + 4) * stride_kd
-        s_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_5 = K + range_t[:] * stride_kt + (off_d2 + 5) * stride_kd
-        s_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_6 = K + range_t[:] * stride_kt + (off_d2 + 6) * stride_kd
-        s_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_7 = K + range_t[:] * stride_kt + (off_d2 + 7) * stride_kd
-        s_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_8 = K + range_t[:] * stride_kt + (off_d2 + 8) * stride_kd
-        s_8 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_8 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_9 = K + range_t[:] * stride_kt + (off_d2 + 9) * stride_kd
-        s_9 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_9 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_10 = K + range_t[:] * stride_kt + (off_d2 + 10) * stride_kd
-        s_10 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_10 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_11 = K + range_t[:] * stride_kt + (off_d2 + 11) * stride_kd
-        s_11 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_11 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_12 = K + range_t[:] * stride_kt + (off_d2 + 12) * stride_kd
-        s_12 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_12 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_13 = K + range_t[:] * stride_kt + (off_d2 + 13) * stride_kd
-        s_13 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_13 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_14 = K + range_t[:] * stride_kt + (off_d2 + 14) * stride_kd
-        s_14 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_14 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         p_k_d2_15 = K + range_t[:] * stride_kt + (off_d2 + 15) * stride_kd
-        s_15 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+        s_15 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         for tid in range(0, tl.cdiv(T, BLOCK_T)):
             k_d1 = tl.load(p_k_d1) # block1 x BLOCK_T
             v = tl.load(p_v)

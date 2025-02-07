@@ -69,6 +69,7 @@ class QueryStateReference(torch.autograd.Function):
             dY_qs = torch.empty_like(dY)
             dY_qs[:, 0] = 0
             dY_qs[:, 1:] = (dY[:, 1:].clone() * qs_factor.narrow(1, 1, n - 1).unsqueeze(-1))
+            # dY_qs = dY.clone() * qs_factor.unsqueeze(-1)
         return dY_attn, dY_qs
 
     @staticmethod
@@ -162,6 +163,7 @@ class QueryStateReference(torch.autograd.Function):
                 dQ[..., j * OuterBlock:(j + 1) * OuterBlock] += dQ_o
 
         dQ = dQ.transpose(2, 3)
+
         return dQ, dS, dY_attn, None, None, None, None, None, None
 
 def query_state_reference(*args, **kwargs):

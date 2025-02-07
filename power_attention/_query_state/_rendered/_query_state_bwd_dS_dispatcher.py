@@ -10,6 +10,7 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                      block1: tl.constexpr, BLOCK_T: tl.constexpr, 
                      BLOCK_D: tl.constexpr, BLOCK_E: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
+    BLOCK_E_VALID: tl.constexpr = e if e < BLOCK_E else BLOCK_E
     if ((BLOCK_D == 128) and ((BLOCK_E == 32) and ((BLOCK_T == 16) and ((block1 == 16))))) or (((BLOCK_D == 128) and ((BLOCK_E == 32) and ((BLOCK_T == 32) and ((block1 == 16))))) or (((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 16) and ((block1 == 16))))) or ((BLOCK_D == 128) and ((BLOCK_E == 64) and ((BLOCK_T == 32) and ((block1 == 16))))))):
         
         if (d == 32):     
@@ -27,12 +28,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
             if M is not None:
                 M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+                chunk_id = off_bn % n
+                if zero_initial_state and chunk_id == 0:
+                    p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+                    tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+                    return
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64)
             range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
             p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
             
             p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
             p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
@@ -42,20 +48,20 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             p_q_d2_5 = Q + range_t[:] * stride_qt + (off_d2 + 5) * stride_qd # [BLOCK_T]
             p_q_d2_6 = Q + range_t[:] * stride_qt + (off_d2 + 6) * stride_qd # [BLOCK_T]
             p_q_d2_7 = Q + range_t[:] * stride_qt + (off_d2 + 7) * stride_qd # [BLOCK_T]
-            ds_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+            ds_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
                 if M is not None:
                     p_m = M + (range_t + tid * BLOCK_T) * stride_mt
                     rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
                 qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
                 q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
                 q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
@@ -75,15 +81,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                 if M is not None:
                     qs_factor = tl.minimum(tl.exp(-rowmax), scale)
                     do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+                else:
+                    do = (do * scale).to(Q.dtype.element_ty)
             
-                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E]
-                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E]
-                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E]
-                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E]
-                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E]
-                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E]
-                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E]
-                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E]
+                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E_VALID]
+                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E_VALID]
+                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E_VALID]
+                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E_VALID]
+                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E_VALID]
+                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E_VALID]
+                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E_VALID]
+                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E_VALID]
                 p_do += BLOCK_T * stride_dot
                 p_qT_d1 += BLOCK_T * stride_qt
                 p_q_d2_0 += BLOCK_T * stride_qt
@@ -137,12 +145,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
             if M is not None:
                 M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+                chunk_id = off_bn % n
+                if zero_initial_state and chunk_id == 0:
+                    p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+                    tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+                    return
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64)
             range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
             p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
             
             p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
             p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
@@ -152,20 +165,20 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             p_q_d2_5 = Q + range_t[:] * stride_qt + (off_d2 + 5) * stride_qd # [BLOCK_T]
             p_q_d2_6 = Q + range_t[:] * stride_qt + (off_d2 + 6) * stride_qd # [BLOCK_T]
             p_q_d2_7 = Q + range_t[:] * stride_qt + (off_d2 + 7) * stride_qd # [BLOCK_T]
-            ds_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+            ds_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
                 if M is not None:
                     p_m = M + (range_t + tid * BLOCK_T) * stride_mt
                     rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
                 qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
                 q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
                 q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
@@ -185,15 +198,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                 if M is not None:
                     qs_factor = tl.minimum(tl.exp(-rowmax), scale)
                     do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+                else:
+                    do = (do * scale).to(Q.dtype.element_ty)
             
-                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E]
-                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E]
-                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E]
-                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E]
-                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E]
-                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E]
-                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E]
-                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E]
+                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E_VALID]
+                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E_VALID]
+                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E_VALID]
+                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E_VALID]
+                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E_VALID]
+                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E_VALID]
+                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E_VALID]
+                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E_VALID]
                 p_do += BLOCK_T * stride_dot
                 p_qT_d1 += BLOCK_T * stride_qt
                 p_q_d2_0 += BLOCK_T * stride_qt
@@ -247,12 +262,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
             if M is not None:
                 M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+                chunk_id = off_bn % n
+                if zero_initial_state and chunk_id == 0:
+                    p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+                    tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+                    return
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64)
             range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
             p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
             
             p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
             p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
@@ -262,20 +282,20 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             p_q_d2_5 = Q + range_t[:] * stride_qt + (off_d2 + 5) * stride_qd # [BLOCK_T]
             p_q_d2_6 = Q + range_t[:] * stride_qt + (off_d2 + 6) * stride_qd # [BLOCK_T]
             p_q_d2_7 = Q + range_t[:] * stride_qt + (off_d2 + 7) * stride_qd # [BLOCK_T]
-            ds_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+            ds_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
                 if M is not None:
                     p_m = M + (range_t + tid * BLOCK_T) * stride_mt
                     rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
                 qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
                 q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
                 q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
@@ -295,15 +315,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                 if M is not None:
                     qs_factor = tl.minimum(tl.exp(-rowmax), scale)
                     do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+                else:
+                    do = (do * scale).to(Q.dtype.element_ty)
             
-                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E]
-                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E]
-                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E]
-                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E]
-                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E]
-                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E]
-                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E]
-                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E]
+                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E_VALID]
+                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E_VALID]
+                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E_VALID]
+                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E_VALID]
+                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E_VALID]
+                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E_VALID]
+                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E_VALID]
+                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E_VALID]
                 p_do += BLOCK_T * stride_dot
                 p_qT_d1 += BLOCK_T * stride_qt
                 p_q_d2_0 += BLOCK_T * stride_qt
@@ -358,12 +380,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
             if M is not None:
                 M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+                chunk_id = off_bn % n
+                if zero_initial_state and chunk_id == 0:
+                    p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+                    tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+                    return
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64)
             range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
             p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
             
             p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
             p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
@@ -381,28 +408,28 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             p_q_d2_13 = Q + range_t[:] * stride_qt + (off_d2 + 13) * stride_qd # [BLOCK_T]
             p_q_d2_14 = Q + range_t[:] * stride_qt + (off_d2 + 14) * stride_qd # [BLOCK_T]
             p_q_d2_15 = Q + range_t[:] * stride_qt + (off_d2 + 15) * stride_qd # [BLOCK_T]
-            ds_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_8 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_9 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_10 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_11 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_12 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_13 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_14 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_15 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+            ds_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_8 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_9 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_10 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_11 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_12 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_13 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_14 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_15 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
                 if M is not None:
                     p_m = M + (range_t + tid * BLOCK_T) * stride_mt
                     rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
                 qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
                 q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
                 q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
@@ -438,23 +465,25 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                 if M is not None:
                     qs_factor = tl.minimum(tl.exp(-rowmax), scale)
                     do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+                else:
+                    do = (do * scale).to(Q.dtype.element_ty)
             
-                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E]
-                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E]
-                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E]
-                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E]
-                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E]
-                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E]
-                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E]
-                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E]
-                ds_8 = tl.dot(phiqT_8, do, ds_8) # [block1 x BLOCK_E]
-                ds_9 = tl.dot(phiqT_9, do, ds_9) # [block1 x BLOCK_E]
-                ds_10 = tl.dot(phiqT_10, do, ds_10) # [block1 x BLOCK_E]
-                ds_11 = tl.dot(phiqT_11, do, ds_11) # [block1 x BLOCK_E]
-                ds_12 = tl.dot(phiqT_12, do, ds_12) # [block1 x BLOCK_E]
-                ds_13 = tl.dot(phiqT_13, do, ds_13) # [block1 x BLOCK_E]
-                ds_14 = tl.dot(phiqT_14, do, ds_14) # [block1 x BLOCK_E]
-                ds_15 = tl.dot(phiqT_15, do, ds_15) # [block1 x BLOCK_E]
+                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E_VALID]
+                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E_VALID]
+                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E_VALID]
+                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E_VALID]
+                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E_VALID]
+                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E_VALID]
+                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E_VALID]
+                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E_VALID]
+                ds_8 = tl.dot(phiqT_8, do, ds_8) # [block1 x BLOCK_E_VALID]
+                ds_9 = tl.dot(phiqT_9, do, ds_9) # [block1 x BLOCK_E_VALID]
+                ds_10 = tl.dot(phiqT_10, do, ds_10) # [block1 x BLOCK_E_VALID]
+                ds_11 = tl.dot(phiqT_11, do, ds_11) # [block1 x BLOCK_E_VALID]
+                ds_12 = tl.dot(phiqT_12, do, ds_12) # [block1 x BLOCK_E_VALID]
+                ds_13 = tl.dot(phiqT_13, do, ds_13) # [block1 x BLOCK_E_VALID]
+                ds_14 = tl.dot(phiqT_14, do, ds_14) # [block1 x BLOCK_E_VALID]
+                ds_15 = tl.dot(phiqT_15, do, ds_15) # [block1 x BLOCK_E_VALID]
                 p_do += BLOCK_T * stride_dot
                 p_qT_d1 += BLOCK_T * stride_qt
                 p_q_d2_0 += BLOCK_T * stride_qt
@@ -540,12 +569,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
             if M is not None:
                 M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+                chunk_id = off_bn % n
+                if zero_initial_state and chunk_id == 0:
+                    p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+                    tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+                    return
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64)
             range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
             p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
             
             p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
             p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
@@ -563,28 +597,28 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             p_q_d2_13 = Q + range_t[:] * stride_qt + (off_d2 + 13) * stride_qd # [BLOCK_T]
             p_q_d2_14 = Q + range_t[:] * stride_qt + (off_d2 + 14) * stride_qd # [BLOCK_T]
             p_q_d2_15 = Q + range_t[:] * stride_qt + (off_d2 + 15) * stride_qd # [BLOCK_T]
-            ds_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_8 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_9 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_10 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_11 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_12 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_13 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_14 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_15 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+            ds_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_8 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_9 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_10 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_11 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_12 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_13 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_14 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_15 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
                 if M is not None:
                     p_m = M + (range_t + tid * BLOCK_T) * stride_mt
                     rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
                 qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
                 q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
                 q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
@@ -620,23 +654,25 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                 if M is not None:
                     qs_factor = tl.minimum(tl.exp(-rowmax), scale)
                     do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+                else:
+                    do = (do * scale).to(Q.dtype.element_ty)
             
-                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E]
-                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E]
-                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E]
-                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E]
-                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E]
-                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E]
-                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E]
-                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E]
-                ds_8 = tl.dot(phiqT_8, do, ds_8) # [block1 x BLOCK_E]
-                ds_9 = tl.dot(phiqT_9, do, ds_9) # [block1 x BLOCK_E]
-                ds_10 = tl.dot(phiqT_10, do, ds_10) # [block1 x BLOCK_E]
-                ds_11 = tl.dot(phiqT_11, do, ds_11) # [block1 x BLOCK_E]
-                ds_12 = tl.dot(phiqT_12, do, ds_12) # [block1 x BLOCK_E]
-                ds_13 = tl.dot(phiqT_13, do, ds_13) # [block1 x BLOCK_E]
-                ds_14 = tl.dot(phiqT_14, do, ds_14) # [block1 x BLOCK_E]
-                ds_15 = tl.dot(phiqT_15, do, ds_15) # [block1 x BLOCK_E]
+                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E_VALID]
+                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E_VALID]
+                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E_VALID]
+                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E_VALID]
+                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E_VALID]
+                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E_VALID]
+                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E_VALID]
+                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E_VALID]
+                ds_8 = tl.dot(phiqT_8, do, ds_8) # [block1 x BLOCK_E_VALID]
+                ds_9 = tl.dot(phiqT_9, do, ds_9) # [block1 x BLOCK_E_VALID]
+                ds_10 = tl.dot(phiqT_10, do, ds_10) # [block1 x BLOCK_E_VALID]
+                ds_11 = tl.dot(phiqT_11, do, ds_11) # [block1 x BLOCK_E_VALID]
+                ds_12 = tl.dot(phiqT_12, do, ds_12) # [block1 x BLOCK_E_VALID]
+                ds_13 = tl.dot(phiqT_13, do, ds_13) # [block1 x BLOCK_E_VALID]
+                ds_14 = tl.dot(phiqT_14, do, ds_14) # [block1 x BLOCK_E_VALID]
+                ds_15 = tl.dot(phiqT_15, do, ds_15) # [block1 x BLOCK_E_VALID]
                 p_do += BLOCK_T * stride_dot
                 p_qT_d1 += BLOCK_T * stride_qt
                 p_q_d2_0 += BLOCK_T * stride_qt
@@ -722,12 +758,17 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             dS += off_bn.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh + off_D.to(tl.int64) * BLOCK_D * stride_dsD
             if M is not None:
                 M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+                chunk_id = off_bn % n
+                if zero_initial_state and chunk_id == 0:
+                    p_ds = dS + tl.arange(0, BLOCK_D)[:, None] * stride_dsD + tl.arange(0, BLOCK_E_VALID)[None, :] * stride_dse
+                    tl.store(p_ds, tl.zeros((BLOCK_D, BLOCK_E_VALID), dtype=dS.dtype.element_ty))
+                    return
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64)
             range_d1 = tl.arange(0, block1).to(tl.int64) + off_d1
-            range_e = tl.arange(0, BLOCK_E).to(tl.int64) + off_e * BLOCK_E
+            range_e = tl.arange(0, BLOCK_E_VALID).to(tl.int64) + off_e * BLOCK_E_VALID
             p_qT_d1 = Q + range_d1[:, None] * stride_qd + range_t[None, :] * stride_qt # [block1 x BLOCK_T]
-            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E]
+            p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x BLOCK_E_VALID]
             
             p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
             p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
@@ -745,28 +786,28 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
             p_q_d2_13 = Q + range_t[:] * stride_qt + (off_d2 + 13) * stride_qd # [BLOCK_T]
             p_q_d2_14 = Q + range_t[:] * stride_qt + (off_d2 + 14) * stride_qd # [BLOCK_T]
             p_q_d2_15 = Q + range_t[:] * stride_qt + (off_d2 + 15) * stride_qd # [BLOCK_T]
-            ds_0 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_1 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_2 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_3 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_4 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_5 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_6 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_7 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_8 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_9 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_10 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_11 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_12 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_13 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_14 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
-            ds_15 = tl.zeros((block1, BLOCK_E), dtype=tl.float32)
+            ds_0 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_1 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_2 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_3 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_4 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_5 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_6 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_8 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_9 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_10 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_11 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_12 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_13 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_14 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
+            ds_15 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
                 if M is not None:
                     p_m = M + (range_t + tid * BLOCK_T) * stride_mt
                     rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
                 qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E]
+                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
                 q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
                 q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
@@ -802,23 +843,25 @@ def _query_state_bwd_dS(Q, M, dO, dS, deg: tl.constexpr, scale, zero_initial_sta
                 if M is not None:
                     qs_factor = tl.minimum(tl.exp(-rowmax), scale)
                     do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+                else:
+                    do = (do * scale).to(Q.dtype.element_ty)
             
-                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E]
-                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E]
-                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E]
-                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E]
-                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E]
-                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E]
-                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E]
-                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E]
-                ds_8 = tl.dot(phiqT_8, do, ds_8) # [block1 x BLOCK_E]
-                ds_9 = tl.dot(phiqT_9, do, ds_9) # [block1 x BLOCK_E]
-                ds_10 = tl.dot(phiqT_10, do, ds_10) # [block1 x BLOCK_E]
-                ds_11 = tl.dot(phiqT_11, do, ds_11) # [block1 x BLOCK_E]
-                ds_12 = tl.dot(phiqT_12, do, ds_12) # [block1 x BLOCK_E]
-                ds_13 = tl.dot(phiqT_13, do, ds_13) # [block1 x BLOCK_E]
-                ds_14 = tl.dot(phiqT_14, do, ds_14) # [block1 x BLOCK_E]
-                ds_15 = tl.dot(phiqT_15, do, ds_15) # [block1 x BLOCK_E]
+                ds_0 = tl.dot(phiqT_0, do, ds_0) # [block1 x BLOCK_E_VALID]
+                ds_1 = tl.dot(phiqT_1, do, ds_1) # [block1 x BLOCK_E_VALID]
+                ds_2 = tl.dot(phiqT_2, do, ds_2) # [block1 x BLOCK_E_VALID]
+                ds_3 = tl.dot(phiqT_3, do, ds_3) # [block1 x BLOCK_E_VALID]
+                ds_4 = tl.dot(phiqT_4, do, ds_4) # [block1 x BLOCK_E_VALID]
+                ds_5 = tl.dot(phiqT_5, do, ds_5) # [block1 x BLOCK_E_VALID]
+                ds_6 = tl.dot(phiqT_6, do, ds_6) # [block1 x BLOCK_E_VALID]
+                ds_7 = tl.dot(phiqT_7, do, ds_7) # [block1 x BLOCK_E_VALID]
+                ds_8 = tl.dot(phiqT_8, do, ds_8) # [block1 x BLOCK_E_VALID]
+                ds_9 = tl.dot(phiqT_9, do, ds_9) # [block1 x BLOCK_E_VALID]
+                ds_10 = tl.dot(phiqT_10, do, ds_10) # [block1 x BLOCK_E_VALID]
+                ds_11 = tl.dot(phiqT_11, do, ds_11) # [block1 x BLOCK_E_VALID]
+                ds_12 = tl.dot(phiqT_12, do, ds_12) # [block1 x BLOCK_E_VALID]
+                ds_13 = tl.dot(phiqT_13, do, ds_13) # [block1 x BLOCK_E_VALID]
+                ds_14 = tl.dot(phiqT_14, do, ds_14) # [block1 x BLOCK_E_VALID]
+                ds_15 = tl.dot(phiqT_15, do, ds_15) # [block1 x BLOCK_E_VALID]
                 p_do += BLOCK_T * stride_dot
                 p_qT_d1 += BLOCK_T * stride_qt
                 p_q_d2_0 += BLOCK_T * stride_qt

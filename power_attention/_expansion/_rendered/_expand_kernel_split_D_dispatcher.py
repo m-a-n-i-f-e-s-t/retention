@@ -1,7 +1,7 @@
 import triton
 import triton.language as tl
 
-def _expand_kernel(K, phi_K, deg: tl.constexpr, 
+def _expand_kernel_split_D(K, phi_K, deg: tl.constexpr, 
                      stride_kb, stride_kt, stride_kh, stride_kd,
                      stride_pb, stride_pt, stride_ph, stride_pD,
                      T, H, d: tl.constexpr, D: tl.constexpr,

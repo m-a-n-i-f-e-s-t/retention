@@ -54,7 +54,7 @@ def get_offsets_p2(off_D, d, block1, block_D):
 @triton.autotune(list(filter(keep, fwd_configs)), key=["deg", "d", "D"], prune_configs_by={'early_config_prune': prune_configs})
 @triton.jit
 @kernelgen(list(filter(keep, fwd_configs)))
-def _expand_kernel(K, phi_K, deg: tl.constexpr, 
+def _expand_kernel_split_D(K, phi_K, deg: tl.constexpr, 
                      stride_kb, stride_kt, stride_kh, stride_kd,
                      stride_pb, stride_pt, stride_ph, stride_pD,
                      T, H, d: tl.constexpr, D: tl.constexpr,
@@ -109,6 +109,66 @@ for tid in range(0, tl.cdiv(T, BLOCK_T)):
     pass
 
 
+@triton.autotune(list(filter(keep, fwd_configs)), key=["deg", "d", "D"], prune_configs_by={'early_config_prune': prune_configs})
+@triton.jit
+@kernelgen(list(filter(keep, fwd_configs)))
+def _expand_kernel_split_T(K, phi_K, deg: tl.constexpr, 
+                     stride_kb, stride_kt, stride_kh, stride_kd,
+                     stride_pb, stride_pt, stride_ph, stride_pD,
+                     T, H, d: tl.constexpr, D: tl.constexpr,
+                     block1: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_T: tl.constexpr):
+    """ 
+    This is a templated kernel, which, when called, will render the embedded
+    template into a triton kernel in ./_rendered/_update_state_fwd_dispatcher.py, 
+    and call the rendered kernel.
+
+    Note that the rendered kernel is only for inspection purpose, modifying it will
+    have no effect on runtime.
+
+    <kernelgen>
+block2: tl.constexpr = BLOCK_D // block1
+off_bh = tl.program_id(0)
+off_b = off_bh // H
+off_h = off_bh % H
+off_t = tl.program_id(1)
+
+K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
+phi_K += off_b.to(tl.int64) * stride_pb + off_h.to(tl.int64) * stride_ph
+
+range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
+range_d1 = tl.arange(0, block1).to(tl.int64)
+
+{% set block2 = BLOCK_D // block1 -%}
+
+for m in range(0, d//block1):
+    p_k_d1 = K + range_t[:, None] * stride_kt + (m*block1 + range_d1[None, :]) * stride_kd # BLOCK_T x block1
+    k_d1 = tl.load(p_k_d1) # BLOCK_T x block1
+    
+    for n in range(0, (m+1)*block1//block2):
+        off_d2 = n*block2
+        off_d2 = tl.multiple_of(off_d2, block2)
+        off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+        multiplier = 1 if (n + 1) * block2 > m * block1 else 2
+        {% for i in range(block2) -%}
+        p_k_d2_{{i}} = K + range_t[:] * stride_kt + (off_d2 + {{i}}) * stride_kd # [BLOCK_T]
+        p_phi_K_{{i}} = phi_K + range_t[:, None] * stride_pt + (off_D + {{i}} * block1 + tl.arange(0, block1)[None, :]).to(tl.int64) * stride_pD # [BLOCK_T x block1]
+        {% endfor -%}
+
+        {% for i in range(block2) -%}
+        k_d2_{{i}} = tl.load(p_k_d2_{{i}}) * multiplier # [BLOCK_T]
+        {% endfor -%}
+        {% for i in range(block2) -%}
+        phik_{{i}} = k_d1 * k_d2_{{i}}[:, None] # [BLOCK_T x block1]
+        {% endfor -%}
+        {% for i in range(block2) -%}
+        tl.store(p_phi_K_{{i}}, phik_{{i}})
+        {% endfor -%}
+
+</kernelgen>
+    """
+    pass
+
+
 def compute_expanded_dim(d, deg, d_block=16):
     """ Compute the expanded state dimension for symmetric power for any given degree.
 
@@ -129,10 +189,11 @@ def compute_expanded_dim(d, deg, d_block=16):
 class _expand(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, k, deg):
+    def forward(ctx, k, deg, split):
         """ Args: 
             K: (B, N, T, H, d)
             deg: int
+            split: str, 'D' or 'T'
 
             Returns:
             phi_K: (B, N, T, H, D) where D > comb(d + deg - 1, deg) with padding
@@ -145,16 +206,24 @@ class _expand(torch.autograd.Function):
 
         phi_K = torch.empty((b*n, t, h, D), device=k.device, dtype=k.dtype)
         stride_pb, stride_pt, stride_ph, stride_pD = phi_K.stride()
-        grid = lambda args: (b*n*h, triton.cdiv(D, args["BLOCK_D"]), 1)
 
         if deg != 2:
             raise NotImplementedError("Only deg = 2 is supported for now")
 
-        _expand_kernel[grid](
-            k, phi_K, deg,
-            stride_kb, stride_kt, stride_kh, stride_kd,
-            stride_pb, stride_pt, stride_ph, stride_pD,
-            t, h, d, D)
+        if split == 'D':
+            grid = lambda args: (b*n*h, triton.cdiv(D, args["BLOCK_D"]), 1)
+            _expand_kernel_split_D[grid](
+                k, phi_K, deg,
+                stride_kb, stride_kt, stride_kh, stride_kd,
+                stride_pb, stride_pt, stride_ph, stride_pD,
+                t, h, d, D)
+        elif split == 'T':
+            grid = lambda args: (b*n*h, triton.cdiv(t, args["BLOCK_T"]), 1)
+            _expand_kernel_split_T[grid](
+                k, phi_K, deg,
+                stride_kb, stride_kt, stride_kh, stride_kd,
+                stride_pb, stride_pt, stride_ph, stride_pD,
+                t, h, d, D)
 
         ctx.save_for_backward(k, phi_K)
         ctx.deg = deg
@@ -164,11 +233,11 @@ class _expand(torch.autograd.Function):
         return phi_K.view(b, n, t, h, D)
 
 
-def expand(K, deg):
-    return _expand.apply(K, deg)
+def expand(K, deg, split):
+    return _expand.apply(K, deg, split)
 
 
-def expand_reference(K, deg):
+def expand_reference(K, deg, split):
     """ Reference implementation of key expansion
     args:
         K: [b, n, c, h, d]
@@ -198,25 +267,25 @@ def expand_reference(K, deg):
     return phi_K.to(K.dtype)
 
 
-def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, device='cuda', seed=42, requires_grad=False):
+def create_inputs(b=2, n=4, c=128, h=8, d=32, dtype=torch.float16, device='cuda', seed=42, requires_grad=False, split='D'):
     torch.manual_seed(seed)
     K = torch.randn(size=(b, n, c, h, d), dtype=dtype, device=device) / d**.25
     if requires_grad:
         K = K.requires_grad_(True)
-    return dict(K=K, deg=2)
+    return dict(K=K, deg=2, split=split)
 
 
 if __name__ == "__main__":
     from perf._timing import benchmark_speed
 
     # Hyperparameters
-    kw = dict(b=1, n=1, c=128, h=12, d=64, dtype=torch.bfloat16, device='cuda', seed=42)
+    kw = dict(b=1, n=1, c=128, h=12, d=64, dtype=torch.bfloat16, device='cuda', seed=42, split='T')
 
     # Check correctness
     inputs_triton = create_inputs(**(kw | dict(requires_grad=True)))
     inputs_ref = create_inputs(**(kw | dict(requires_grad=True)))
-    phi_k_triton = expand(inputs_triton['K'], inputs_triton['deg'])
-    phi_k_ref = expand_reference(inputs_ref['K'], inputs_ref['deg'])
+    phi_k_triton = expand(inputs_triton['K'], inputs_triton['deg'], inputs_triton['split'])
+    phi_k_ref = expand_reference(inputs_ref['K'], inputs_ref['deg'], inputs_ref['split'])
     torch.testing.assert_close(phi_k_triton, phi_k_ref, atol=1e-4, rtol=1e-2)
     print("Fwd correctness check passed")
 

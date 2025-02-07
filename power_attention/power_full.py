@@ -10,7 +10,7 @@ from power_attention._attention import attention, attention_reference
 from power_attention._update_state import update_state, update_state_reference, update_state_triton
 from power_attention._discumsum import discumsum, discumsum_reference
 from power_attention._query_state import query_state, query_state_reference, query_state_triton
-from power_attention._utils import compute_expanded_dim, layernorm
+from power_attention._utils import compute_expanded_dim, layernorm, unscale_ballnorm
 import math
 
 
@@ -42,12 +42,12 @@ def update_state_matmul(K, V, *args):
 def post_query_state(Y, rowmax, scale, zero_initial_state):
     """Post-process the query state output with layernorm.
     """
-    scale_tensor = torch.tensor(1 / scale, device=rowmax.device, dtype=rowmax.dtype)
-    scale_attn = torch.exp(-rowmax)
-    min_scale = torch.min(scale_tensor, scale_attn)
+    log_scale = torch.log(torch.tensor(1 / scale, device=rowmax.device, dtype=rowmax.dtype))
+    log_scale_attn = torch.min(log_scale, -rowmax)
     if zero_initial_state:
-        min_scale[:, 0:1] = scale_attn.narrow(1, 0, 1)
-    return layernorm(Y, eps=min_scale*1e-5)
+        log_scale_attn[:, 0:1] = -rowmax.narrow(1, 0, 1)
+    normed_Y = unscale_ballnorm(Y, -log_scale_attn[..., None])
+    return normed_Y
 
 def query_state_matmul(Q, S, attn_Y, rowmax, deg, scale, zero_initial_state):
     """Query state implementation using matmul. This implementation is used when deg == 1.
@@ -70,8 +70,16 @@ def query_state_matmul(Q, S, attn_Y, rowmax, deg, scale, zero_initial_state):
     min_scale = torch.min(scale_qs, scale_attn)
     qs_factor = min_scale / scale_qs
     attn_factor = min_scale / scale_attn
-    Y = attn_Y * attn_factor.unsqueeze(-1) + Y * qs_factor.unsqueeze(-1)
-    return layernorm(Y, eps=min_scale*1e-5)
+    if not zero_initial_state:
+        Y = attn_Y * attn_factor.unsqueeze(-1) + Y * qs_factor.unsqueeze(-1)
+    else:
+        Y[:, 0:1] = attn_Y.narrow(1, 0, 1)
+        Y[:, 1:] = attn_Y.narrow(1, 1, n - 1) * attn_factor.narrow(1, 1, n - 1).unsqueeze(-1) + Y.narrow(1, 1, n - 1) * qs_factor.narrow(1, 1, n - 1).unsqueeze(-1)
+    log_scale = torch.log(torch.tensor(1 / scale, device=rowmax.device, dtype=rowmax.dtype))
+    log_scale_attn = torch.min(log_scale, -rowmax)
+    if zero_initial_state:
+        log_scale_attn[:, 0:1] = -rowmax.narrow(1, 0, 1)
+    return unscale_ballnorm(Y, -log_scale_attn[..., None])
 
 IMPL_MAP = {
     UpdateStateImpl.CUTLASS: update_state,
@@ -201,8 +209,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
             log_G_accum = log_G.cumsum(1) if log_G is not None else None
             Y, _, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
             assert Y.is_contiguous(), 'Y must be contiguous'
-            rowmax = rowmax - math.log(scale)
-            out = layernorm(Y, eps=torch.exp(-rowmax)*1e-5)
+            out = unscale_ballnorm(Y, (rowmax - math.log(scale))[..., None])
             return out
 
         # Reshape into chunks

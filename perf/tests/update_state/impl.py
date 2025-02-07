@@ -137,6 +137,7 @@ def test_update_state_matches_reference(kw):
 
 @pytest.mark.parametrize("kw", REF_TEST_CASES, ids=id_fn)
 def test_update_state_triton_matches_reference(kw):
+    torch.compiler.reset() # TODO(sean): figure out why this is needed to make triton pass
     gold_inputs = create_inputs_impl(**(kw | {'dtype': torch.float32}))
     test_inputs = create_inputs_impl(**kw)
     check_fn_forwards_match(
@@ -161,6 +162,7 @@ def test_update_state_grad_matches_reference(kw):
 
 @pytest.mark.parametrize("kw", REF_TEST_CASES, ids=id_fn)
 def test_update_state_triton_grad_matches_reference(kw):
+    torch.compiler.reset() # TODO(sean): figure out why this is needed to make triton pass
     gold_inputs = create_inputs_impl(**(kw | {'dtype': torch.float32}), requires_grad=True)
     test_inputs = create_inputs_impl(**kw, requires_grad=True)
     check_fn_backwards_match(

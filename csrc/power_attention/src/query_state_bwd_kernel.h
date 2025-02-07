@@ -266,7 +266,7 @@ namespace power_attention
 
         // Main loop
         // conditionally skip the first chunk if the initial state is 0, in which case acc_ds and acc_dn are zero
-        if (params.non_zero_initial_state || chunk_id > 0) {
+        if (!params.has_rowmax || (params.non_zero_initial_state || chunk_id > 0)) {
             for (; q_block >= 0; --q_block)
             {
                 // start loading next Q, dy and dY, if double buffer is enabled
