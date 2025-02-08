@@ -79,12 +79,12 @@ pip install -U git+https://github.com/fla-org/flash-linear-attention
 To see what benchmarks are available, run
 
 ```bash
-python benchmarks.py --help
+python -m perf.benchmark --help
 ```
 
 To run benchmarks, simply run
 
 ```bash
-python benchmarks.py <benchmark_name>
+python -m perf.benchmark <benchmark_name>
 ```
 
