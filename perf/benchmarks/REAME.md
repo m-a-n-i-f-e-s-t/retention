@@ -10,7 +10,7 @@ We have a lot of things we care about during development. For example, the speed
 
 # Run
 
-A run is **a callable that does a thing**. Specifically, it is a class that implements the `make_run` method, which takes in a set of keyword arguments and return a argument-less callable. 
+A run is **a callable that does a thing**. Specifically, it is a class that implements the `make_run` method, which takes in a set of keyword arguments and return an argument-less callable. 
 
 ```python
 class Run():
