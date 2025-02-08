@@ -1,6 +1,6 @@
 """ This module contains the definition of run groups, which are groups of runs that share the same input variation. """
 from typing import List, Tuple
-from runs import SDPA, FLA, Power, PowerTriton, TritonExpansion, MosaicExpansion
+from .runs import SDPA, FLA, Power, PowerTriton, TritonExpansion, MosaicExpansion
 
 
 def sdpa_context_scaling(params_range: List[Tuple[int, int]], **kw):

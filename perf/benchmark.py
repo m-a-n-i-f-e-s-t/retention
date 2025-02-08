@@ -8,8 +8,8 @@ from collections import defaultdict
 from typing import Dict, List, Any, Callable, Iterator
 from tabulate import tabulate
 
-from rungroups import *
-from runs import *
+from .benchmarks.rungroups import *  # noqa
+from .benchmarks.runs import *  # noqa
 
 # Increase PyTorch compilation cache size to avoid recompilation
 torch._dynamo.config.cache_size_limit = 512
