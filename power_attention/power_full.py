@@ -165,7 +165,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
     """ Create a power_full function with the given implementations.
     """
     def _power_full(Q, K, V, log_G=None, initial_state=None,
-                deg=2, scale=None, chunk_size=None): # noqa: C901
+                deg=2, scale=None, chunk_size=None, ballnorm=False): # noqa: C901
         if initial_state is not None:
             raise NotImplementedError('Initial state not implemented')
 
@@ -211,6 +211,8 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
             assert Y.is_contiguous(), 'Y must be contiguous'
             out = unscale_ballnorm(Y, (rowmax - math.log(scale))[..., None])
             return out
+        if ballnorm:
+            raise NotImplementedError('Ballnorm not implemented for chunked attention, only for O(n²) attention')
 
         # Reshape into chunks
         Q = Q.view(b, n, c, hq, d)
