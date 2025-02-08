@@ -75,7 +75,11 @@ class FLA():
             head_first=head_first,
         )
 
-        return lambda: fn(**inputs)
+        def only_return_o():
+            o, final_state = fn(**inputs)
+            return o
+
+        return only_return_o
 
 
 class Power():
@@ -254,7 +258,7 @@ class PowerAttention():
         inputs = PowerAttention.create_inputs(**kw)
         return lambda: attention(**inputs)
     
-    
+
 class PowerAttentionTriton(PowerAttention):
     @staticmethod
     def make_run(**kw):

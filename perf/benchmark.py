@@ -37,9 +37,9 @@ def _speed_benchmark(run_groups: Dict[str, Iterator[Callable[[], Any]]], param_n
                 create_inputs=lambda **kw: {},
                 create_inputs_kwargs={},
                 compile=compile,
-                num1=3,
-                num2=10,
-                warmup=1,
+                num1=5,
+                num2=15,
+                warmup=3,
             )
             results[group_name].append(ms)
 
@@ -56,13 +56,7 @@ def _speed_benchmark(run_groups: Dict[str, Iterator[Callable[[], Any]]], param_n
     print("Unit in (ms)")
     print(f"Time taken: {time.time() - start_time:.2f} seconds")
     return results
-    
-def _profile_benchmark(run_groups: Dict[str, Iterator[Callable[[], Any]]], param_range: List[Any]):
-    """ Run the given run groups.
-    """
-    for group_name, group in run_groups.items():
-        for run in group.make_runs(param_range):
-            run()
+
 
 @click.group()
 def bench():
@@ -98,7 +92,7 @@ def expansion_speed(b: int, h: int, d: int, dtype: str, device: str, deg: int):
 
 @bench.command()
 @click.option('--tokens', type=int, default=65536)
-@click.option('--h', type=int, default=1)
+@click.option('--h', type=int, default=12)
 @click.option('--d', type=int, default=64)
 @click.option('--dtype', type=str, default='float16')
 @click.option('--device', type=str, default='cuda')
@@ -119,8 +113,9 @@ def context_scaling(tokens: int, h: int, d: int, dtype: str, device: str, deg: i
         'gating': gating,
         'requires_grad': 'bwd' in mode
     }
-    ctx_range = [2**i for i in range(10, 17)]
-    ctx_range = [ctx for ctx in ctx_range if ctx >= chunk_size*4 and ctx <= tokens]
+    ctx_range = [1024*i for i in (1, 4, 8, 12, 16, 20, 24, 32, 48, 64)]
+    if chunk_size is not None:
+        ctx_range = [ctx for ctx in ctx_range if ((ctx % (chunk_size*4) == 0) and ctx <= tokens)]
     if not ctx_range:
         raise ValueError(f"No valid context size found. Please try a different chunk size or number of tokens.")
     batch_sizes = [tokens // ctx for ctx in ctx_range]
@@ -134,7 +129,7 @@ def context_scaling(tokens: int, h: int, d: int, dtype: str, device: str, deg: i
     print("Speed benchmark for context scaling")
     print(f"{tokens = }, {h = }, {d = }, {dtype = }, {device = }, {deg = }, {chunk_size = }, {gating = }, {mode = }, {compile = }")
     print("------------------------------------------")
-    return _speed_benchmark(run_groups, 'ctx', ctx_range)
+    return _speed_benchmark(run_groups, 'ctx', ctx_range, mode=mode, compile=compile)
 
 
 @bench.command()
@@ -204,22 +199,23 @@ def run(kernel: str, b: int, t: int, h: int, d: int, dtype: str, device: str, de
         'device': device,
         'deg': deg,
         'chunk_size': chunk_size,
-        'gating': gating
+        'gating': gating,
+        'requires_grad': 'bwd' in mode
     }
     run = {
-        'sdpa': SDPA.make_run(**fixed_kwargs),
-        'fla': FLA.make_run(**fixed_kwargs),
-        'power': Power.make_run(**fixed_kwargs),
-        'power_triton': PowerTriton.make_run(**fixed_kwargs),
-        'query_state': QueryState.make_run(**fixed_kwargs),
-        'query_state_triton': QueryStateTriton.make_run(**fixed_kwargs),
-        'update_state': UpdateState.make_run(**fixed_kwargs),
-        'update_state_triton': UpdateStateTriton.make_run(**fixed_kwargs),
-        'power_attention': PowerAttention.make_run(**fixed_kwargs),
-        'power_attention_triton': PowerAttentionTriton.make_run(**fixed_kwargs),
-        'expand_triton': TritonExpansion.make_run(**fixed_kwargs),
-        'expand_mosaic': MosaicExpansion.make_run(**fixed_kwargs),
-    }[kernel]
+        'sdpa': lambda: SDPA.make_run(**fixed_kwargs),
+        'fla': lambda: FLA.make_run(**fixed_kwargs),
+        'power': lambda: Power.make_run(**fixed_kwargs),
+        'power_triton': lambda: PowerTriton.make_run(**fixed_kwargs),
+        'query_state': lambda: QueryState.make_run(**fixed_kwargs),
+        'query_state_triton': lambda: QueryStateTriton.make_run(**fixed_kwargs),
+        'update_state': lambda: UpdateState.make_run(**fixed_kwargs),
+        'update_state_triton': lambda: UpdateStateTriton.make_run(**fixed_kwargs),
+        'power_attention': lambda: PowerAttention.make_run(**fixed_kwargs),
+        'power_attention_triton': lambda: PowerAttentionTriton.make_run(**fixed_kwargs),
+        'expand_triton': lambda: TritonExpansion.make_run(**fixed_kwargs),
+        'expand_mosaic': lambda: MosaicExpansion.make_run(**fixed_kwargs),
+    }[kernel]()
     print(f"Running {kernel} with {b = }, {t = }, {h = }, {d = }, {dtype = }, {device = }, {deg = }, {chunk_size = }, {gating = }, {mode = }, {compile = }")
     if measure:
         ms = benchmark_speed(
@@ -228,9 +224,9 @@ def run(kernel: str, b: int, t: int, h: int, d: int, dtype: str, device: str, de
             create_inputs=lambda **kw: {},
             create_inputs_kwargs={},
             compile=compile,
-            num1=3,
-            num2=10,
-            warmup=1,
+            num1=5,
+            num2=15,
+            warmup=3,
         )
         print(f"Run time: {ms:.2f} ms")
     else:

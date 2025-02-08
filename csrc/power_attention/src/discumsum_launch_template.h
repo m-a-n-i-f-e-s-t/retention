@@ -128,9 +128,9 @@ namespace power_attention
         const int did = blockIdx.x;
         const int hid = blockIdx.y;
         const int bid = blockIdx.z;
-        const index_t input_offset = bid * params.batch_stride + hid * params.head_stride + did * DBlock;
+        const index_t input_offset = bid * params.batch_stride + hid * params.head_stride + did * index_t(DBlock);
         const index_t discount_offset = bid * params.batch_stride_discount + hid * params.head_stride_discount;
-        const index_t output_offset = bid * params.batch_stride_out + hid * params.head_stride_out + did * DBlock;
+        const index_t output_offset = bid * params.batch_stride_out + hid * params.head_stride_out + did * index_t(DBlock);
 
         extern __shared__ char smem[];
 
@@ -168,13 +168,13 @@ namespace power_attention
 
         auto cX = make_identity_tensor(sX.shape());
         auto cD = make_identity_tensor(sD.shape());
-        auto tXcX = gmem_thr_copy_input.partition_D(cX);
+        auto tXcX = gmem_thr_copy_input.partition_S(cX);
         auto tDcD = gmem_thr_copy_discount.partition_D(cD);
         auto tYcY = gmem_thr_copy_output.partition_D(cX);
 
         auto tXgX = gmem_thr_copy_input.partition_S(gX);
         auto tDgD = gmem_thr_copy_discount.partition_S(gD);
-        auto tXsX = gmem_thr_copy_input.partition_S(sX);
+        auto tXsX = gmem_thr_copy_input.partition_D(sX);
         auto tDsD = gmem_thr_copy_discount.partition_S(sD);
         auto tYgY = gmem_thr_copy_output.partition_D(gY);
         auto tYsY = gmem_thr_copy_output.partition_S(sY);
@@ -267,7 +267,7 @@ namespace power_attention
         }
 
         // main loop
-        for (int n_block = 0; n_block <= last_n_block; n_block++)
+        for (; n_block <= last_n_block; n_block++)
         {
             // TODO (sean): pipeline reads from gmem
             load_X();
