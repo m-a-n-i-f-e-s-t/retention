@@ -94,7 +94,7 @@ class Power():
 
         # 128 is not supported by power_full yet
         if d == 128:
-            return lambda: None
+            return lambda: torch.ones((1, 1, 1, 1), dtype=dtype, device=device)
 
         Q = torch.randn((b, t, h, d), dtype=dtype, device=device, requires_grad=requires_grad)
         K = torch.randn((b, t, h, d), dtype=dtype, device=device, requires_grad=requires_grad)

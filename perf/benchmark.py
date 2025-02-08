@@ -102,7 +102,7 @@ def expansion_speed(b: int, h: int, d: int, dtype: str, device: str, deg: int):
 @click.option('--mode', type=str, default='fwd', help='fwd or bwd or fwd+bwd')
 @click.option('--compile', type=bool, default=True)
 def context_scaling(tokens: int, h: int, d: int, dtype: str, device: str, deg: int, chunk_size: int, gating: bool, mode: str, compile: bool):
-    """Comparing the speed of all implementations"""
+    """Comparing the speed of all implementations by varying context size"""
     fixed_kwargs = {
         'h': h,
         'd': d,
@@ -143,7 +143,7 @@ def context_scaling(tokens: int, h: int, d: int, dtype: str, device: str, deg: i
 @click.option('--mode', type=str, default='fwd', help='fwd or bwd or fwd+bwd')
 @click.option('--compile', type=bool, default=True)
 def dim_scaling(b: int, t: int, h: int, dtype: str, device: str, chunk_size: int, gating: bool, mode: str, compile: bool):
-    """Comparing the speed of all implementations"""
+    """Comparing the speed of all implementations by varying head dimension"""
     fixed_kwargs = {
         'h': h,
         'b': b,
@@ -158,8 +158,9 @@ def dim_scaling(b: int, t: int, h: int, dtype: str, device: str, chunk_size: int
     run_groups = {
         'sdpa': sdpa_headdim_scaling(d_range, **fixed_kwargs),
         'fla': fla_headdim_scaling(d_range, **fixed_kwargs),
-        'power_p1': power_triton_headdim_scaling(d_range, **{**fixed_kwargs, 'deg': 1}),
-        'power_p2': power_triton_headdim_scaling(d_range, **{**fixed_kwargs, 'deg': 2}),
+        'power_p1': power_headdim_scaling(d_range, **{**fixed_kwargs, 'deg': 1}),
+        'power_p2': power_headdim_scaling(d_range, **{**fixed_kwargs, 'deg': 2}),
+        'power_triton_p1': power_triton_headdim_scaling(d_range, **{**fixed_kwargs, 'deg': 1}),
         'power_triton_p2': power_triton_headdim_scaling(d_range, **{**fixed_kwargs, 'deg': 2}),
     }
     print("Speed benchmark for head dimension scaling")
