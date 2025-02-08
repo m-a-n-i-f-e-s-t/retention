@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from enum import Enum
 from torch.utils._pytree import tree_map
-from power_attention._attention import attention, attention_reference
+from power_attention._attention import attention, attention_reference, attention_triton
 from power_attention._update_state import update_state, update_state_reference, update_state_triton
 from power_attention._discumsum import discumsum, discumsum_reference
 from power_attention._query_state import query_state, query_state_reference, query_state_triton
@@ -94,7 +94,7 @@ IMPL_MAP = {
     DiscumsumImpl.REFERENCE: discumsum_reference,
     AttentionImpl.CUTLASS: attention,
     AttentionImpl.REFERENCE: attention_reference,
-    # AttentionImpl.TRITON: attention_triton,
+    AttentionImpl.TRITON: attention_triton,
 }
 
 POWER_FULL_DOC = r"""
@@ -280,7 +280,7 @@ power_full_reference = _make_power_full(UpdateStateImpl.REFERENCE, QueryStateImp
 
 power_full = _make_power_full(UpdateStateImpl.CUTLASS, QueryStateImpl.CUTLASS, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
 
-power_full_triton = _make_power_full(UpdateStateImpl.TRITON, QueryStateImpl.TRITON, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
+power_full_triton = _make_power_full(UpdateStateImpl.TRITON, QueryStateImpl.TRITON, DiscumsumImpl.CUTLASS, AttentionImpl.TRITON)
 
 ## Useful function to create sample inputs
 def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, device='cuda', gating=False,
