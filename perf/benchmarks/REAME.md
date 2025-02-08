@@ -1,7 +1,7 @@
 # How do we benchmark?
 
 ```bash
-python benchmarks.py <benchmark_name>
+python -m perf.benchmark <benchmark_name>
 ```
 
 # Motivation
