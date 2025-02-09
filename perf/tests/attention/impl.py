@@ -153,15 +153,17 @@ def test_attention_triton_matches_reference(kw):
     gold_inputs = create_inputs_impl(**(kw | {'dtype': torch.float32}))
     ref_inputs = create_inputs_triton(**kw)
 
-    # this wrapper is needed because triton attention doesn't return lse
-    def wrapper(*args, **kwargs):
-        Y, _, rowmax = attention_reference(*args, **kwargs)
-        return Y, rowmax
+    # this wrapper is needed because triton attention doesn't return real lse
+    def wrap(fn):
+        def wrapper(*args, **kwargs):
+            Y, _, rowmax = fn(*args, **kwargs)
+            return Y, rowmax
+        return wrapper
 
     check_fn_forwards_match(
-        ref_fn=wrapper,
+        ref_fn=wrap(attention_reference),
         gold_inputs=gold_inputs,
-        test_fn=attention_triton,
+        test_fn=wrap(attention_triton),
         test_inputs=ref_inputs,
         rtol=2.
     )
@@ -183,15 +185,17 @@ def test_attention_triton_grad_matches_reference(kw):
     gold_inputs = create_inputs_impl(**(kw | {'dtype': torch.float32}), requires_grad=True)
     ref_inputs = create_inputs_triton(**(kw | {'requires_grad': True}))
 
-    # this wrapper is needed because triton attention doesn't return lse
-    def wrapper(*args, **kwargs):
-        Y, _, rowmax = attention_reference(*args, **kwargs)
-        return Y, rowmax
+    # this wrapper is needed because triton attention doesn't return real lse
+    def wrap(fn):
+        def wrapper(*args, **kwargs):
+            Y, _, rowmax = fn(*args, **kwargs)
+            return Y, rowmax
+        return wrapper
 
     check_fn_backwards_match(
-        ref_fn=wrapper,
+        ref_fn=wrap(attention_reference),
         gold_inputs=gold_inputs,
-        test_fn=attention_triton,
+        test_fn=wrap(attention_triton),
         test_inputs=ref_inputs,
         rtol=2.
     )
