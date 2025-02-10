@@ -44,6 +44,8 @@ class CausalSelfAttention(nn.Module):
         self.qhead_ratio = config.qhead_ratio
         self.log_space = config.log_space
         self.gating = not config.disable_gating
+        if self.gating and self.attention_kernel == 'sdpa':
+            print('WARNING: SDPA does not support gating, gating is ignored.')
         # key, query, value projections for all heads, but in a batch
         self.qkv_size = (config.qhead_ratio + 2) * self.n_head * self.head_size
         self.gating_size = config.n_head if self.gating else 0
@@ -85,7 +87,6 @@ class CausalSelfAttention(nn.Module):
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.attention_kernel == 'sdpa':
-            if self.gating: raise NotImplementedError('SDPA does not support gating')
             q = q.transpose(1, 2) # (B, nh, T, hs)
             k = k.transpose(1, 2) # (B, nh, T, hs)
             v = v.transpose(1, 2) # (B, nh, T, hs)
