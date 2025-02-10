@@ -207,7 +207,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
                 if gating:
                     log_G = log_G.repeat_interleave(qhead_ratio, dim=2)
             log_G_accum = log_G.cumsum(1) if log_G is not None else None
-            Y, _, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
+            Y, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
             assert Y.is_contiguous(), 'Y must be contiguous'
             out = unscale_ballnorm(Y, (rowmax - math.log(scale))[..., None])
             return out
@@ -255,7 +255,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
             V_flatbatch = V_flatbatch.repeat_interleave(qhead_ratio, dim=2)
             if gating:
                 log_G_intrachunk_accum_flatbatch = log_G_intrachunk_accum_flatbatch.repeat_interleave(qhead_ratio, dim=2)
-        attn_Y, _, rowmax = _attention(Q_flatbatch, K_flatbatch, V_flatbatch, log_G_intrachunk_accum_flatbatch, deg, scale)
+        attn_Y, rowmax = _attention(Q_flatbatch, K_flatbatch, V_flatbatch, log_G_intrachunk_accum_flatbatch, deg, scale)
         attn_Y = attn_Y.view(b, n, c, hq, d)
         rowmax = rowmax.view(b, n, c, hq).detach()
         rowmax = rowmax - math.log(scale)
