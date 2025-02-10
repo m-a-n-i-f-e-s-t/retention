@@ -27,7 +27,7 @@ def get_compiled_version(fn, inputs, direction, warmup=3, compile=True):
     torch._dynamo.config.compiled_autograd = False
     def fwd_bwd():
         outputs = fn(**inputs)
-        torch.autograd.backward(outputs, grad_tensors=grads, retain_graph=True)
+        torch.autograd.backward(outputs, grad_tensors=grads)
     # Compile functions
     if direction == 'fwd':
         compiled_fn = torch.compile(fwd, dynamic=False) if compile else fwd

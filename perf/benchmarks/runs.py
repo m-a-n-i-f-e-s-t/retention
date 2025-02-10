@@ -1,5 +1,7 @@
-
+from functools import wraps
+import inspect
 import torch
+
 from fla.ops.linear_attn import chunk_linear_attn, fused_chunk_linear_attn
 from power_attention_cuda import mosaic_sympow
 from power_attention.power_full import power_full, power_full_triton, create_inputs as create_inputs_power
@@ -12,9 +14,9 @@ from perf.baselines.sdpa import create_inputs as create_inputs_sdpa
 
 
 def sanitize_kwargs(fn):
-    from functools import wraps
-    import inspect
-    
+    """
+    Sanitizes kwargs by removing any that are not in the function signature.
+    """
     @wraps(fn)
     def wrapper(**kwargs):
         sig = inspect.signature(fn)
@@ -34,6 +36,7 @@ class SDPA():
 class FLA():
     @staticmethod
     def make_run(**kw):
+        kw['output_final_state'] = True # This has to be True for FLA backward pass to be compiable with torch.autograd.backward
         inputs = sanitize_kwargs(create_inputs_fla)(**kw)
 
         if kw.get('fused', False):
