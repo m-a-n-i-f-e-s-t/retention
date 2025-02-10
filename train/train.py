@@ -25,6 +25,7 @@ from datetime import timedelta
 
 import numpy as np
 import torch
+import getpass
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
@@ -46,7 +47,7 @@ run_name = None
 disable_logging = False
 wandb_project = None
 # data
-data_root = os.path.expanduser('/shared/mai_datasets')
+data_root = os.path.expanduser('~/mai_datasets')
 dataset = 'ngpt_owt'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
@@ -243,7 +244,7 @@ if master_process and not disable_logging:
         name=run_name,
         info={'config': config},
         wandb_project=wandb_project,
-        server_url='http://log-cabin:8080/sean/api',
+        server_url=f'http://log-cabin:8080/{getpass.getuser()}/api',
     )
     print(f"\033[37mLogging as \033[34m{run_name}\033[37m.\033[0m")
 

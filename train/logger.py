@@ -234,6 +234,7 @@ def init(name=None, info=None, server_url="http://log-cabin:8000", local_root=os
     
     # Initialize server connection if enabled
     if SERVER_URL:
+        print(f"Initializing server connection to {SERVER_URL}")
         try:
             with httpx.Client() as client:
                 response = client.post(
