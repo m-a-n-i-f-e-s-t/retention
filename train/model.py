@@ -55,8 +55,6 @@ class CausalSelfAttention(nn.Module):
         # regularization
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
-        # ballnorm
-        self.ballnorm = config.ballnorm
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
@@ -187,7 +185,6 @@ class GPTConfig:
     head_size: int = 64
     qhead_ratio: int = 1
     log_space: bool = False
-    ballnorm: bool = False
 
 class GPT(nn.Module):
 
