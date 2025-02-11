@@ -680,7 +680,8 @@ class _power_attention(torch.autograd.Function):
 
 
 def attention(Q, K, V, log_G, deg, scale, r=1, w=1, causal=True, head_first=False, norm=False):
-    return _power_attention.apply(Q, K, V, log_G, deg, scale, r, w, causal, head_first, norm)
+    Y, rowmax = _power_attention.apply(Q, K, V, log_G, deg, scale, r, w, causal, head_first, norm)
+    return Y, rowmax
 
 
 def create_inputs(b=2, t=32, h=8, d=32, dtype=torch.float16, device='cuda', scale=1.0, deg=2, r=1, w=1, causal=True, gating=False, head_first=False, norm=False, requires_grad=False, seed=42, std=1.0):

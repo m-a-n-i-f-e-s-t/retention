@@ -25,6 +25,7 @@ from datetime import timedelta
 
 import numpy as np
 import torch
+import getpass
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
@@ -82,7 +83,6 @@ chunk_size = None
 degree = 1
 head_size = 64 # to separate from n_embd
 qhead_ratio = 1
-ballnorm = False
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -152,7 +152,7 @@ best_val_loss = 1e9
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
                   bias=bias, vocab_size=None, dropout=dropout,
                   attention_kernel=attention_kernel, disable_gating=disable_gating, head_size=head_size,
-                  chunk_size=chunk_size, degree=degree, qhead_ratio=qhead_ratio, ballnorm=ballnorm) # start with model_args from command line
+                  chunk_size=chunk_size, degree=degree, qhead_ratio=qhead_ratio) # start with model_args from command line
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
@@ -242,7 +242,8 @@ if master_process and not disable_logging:
     run_name = logger.init(
         name=run_name,
         info={'config': config},
-        wandb_project=wandb_project
+        wandb_project=wandb_project,
+        server_url=f'http://log-cabin:8080/{getpass.getuser()}/api',
     )
     print(f"\033[37mLogging as \033[34m{run_name}\033[37m.\033[0m")
 

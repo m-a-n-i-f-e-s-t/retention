@@ -73,20 +73,19 @@ def attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor,
     rowmax = rowmax.detach()
     if normal_space:
         rowmax = torch.log(rowmax ** deg)
-    return Y, y, rowmax
+    return Y, rowmax
 
 # Make it traceable
 @attention.register_fake
 def attention_fake(Q, K, V, log_G, deg, scale):
     b, t, h, d = Q.shape
     return (torch.empty(b, t, h, d, device=Q.device, dtype=Q.dtype), 
-            torch.empty(b, t, h, device=Q.device, dtype=torch.float32),
             torch.empty(b, t, h, device=Q.device, dtype=torch.float32))
 
 # Autograd setup
 def attention_setup(ctx, inputs, output):
     Q, K, V, log_G, deg, scale = inputs
-    _, _, rowmax = output
+    _, rowmax = output
 
     b, t, h, d = Q.shape
     if scale is None:
@@ -101,8 +100,10 @@ def attention_setup(ctx, inputs, output):
     ctx.scale = scale
     ctx.deg = deg
 
-def attention_backward(ctx, dY, dy, _):
+def attention_backward(ctx, dY, _):
     Q, K, V, log_G_Q, log_G_K, rowmax = ctx.saved_tensors
+    b, t, h, d = Q.shape
+    dy = torch.zeros(b, t, h, device=Q.device, dtype=torch.float32)
     if log_G_Q is None:
         dQ, dK, dV = attention_bwd_gatingless(Q, K, V, dY, dy, rowmax, ctx.deg, ctx.scale)
         dlog_G = None

@@ -43,7 +43,9 @@ class CausalSelfAttention(nn.Module):
         self.head_size = config.head_size
         self.qhead_ratio = config.qhead_ratio
         self.log_space = config.log_space
-        self.gating = self.attention_kernel != 'sdpa' and not config.disable_gating
+        self.gating = not config.disable_gating
+        if self.gating and self.attention_kernel == 'sdpa':
+            print('WARNING: SDPA does not support gating, gating is ignored.')
         # key, query, value projections for all heads, but in a batch
         self.qkv_size = (config.qhead_ratio + 2) * self.n_head * self.head_size
         self.gating_size = config.n_head if self.gating else 0
@@ -53,8 +55,6 @@ class CausalSelfAttention(nn.Module):
         # regularization
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
-        # ballnorm
-        self.ballnorm = config.ballnorm
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
@@ -85,7 +85,6 @@ class CausalSelfAttention(nn.Module):
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.attention_kernel == 'sdpa':
-            if self.gating: raise NotImplementedError('SDPA does not support gating')
             q = q.transpose(1, 2) # (B, nh, T, hs)
             k = k.transpose(1, 2) # (B, nh, T, hs)
             v = v.transpose(1, 2) # (B, nh, T, hs)
@@ -186,7 +185,6 @@ class GPTConfig:
     head_size: int = 64
     qhead_ratio: int = 1
     log_space: bool = False
-    ballnorm: bool = False
 
 class GPT(nn.Module):
 

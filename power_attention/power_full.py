@@ -6,11 +6,11 @@ import torch
 import torch.nn.functional as F
 from enum import Enum
 from torch.utils._pytree import tree_map
-from power_attention._attention import attention, attention_reference
+from power_attention._attention import attention, attention_reference, attention_triton
 from power_attention._update_state import update_state, update_state_reference, update_state_triton
 from power_attention._discumsum import discumsum, discumsum_reference
 from power_attention._query_state import query_state, query_state_reference, query_state_triton
-from power_attention._utils import compute_expanded_dim, layernorm, unscale_ballnorm
+from power_attention._utils import compute_expanded_dim, unscale_ballnorm
 import math
 
 
@@ -94,7 +94,7 @@ IMPL_MAP = {
     DiscumsumImpl.REFERENCE: discumsum_reference,
     AttentionImpl.CUTLASS: attention,
     AttentionImpl.REFERENCE: attention_reference,
-    # AttentionImpl.TRITON: attention_triton,
+    AttentionImpl.TRITON: attention_triton,
 }
 
 POWER_FULL_DOC = r"""
@@ -165,7 +165,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
     """ Create a power_full function with the given implementations.
     """
     def _power_full(Q, K, V, log_G=None, initial_state=None,
-                deg=2, scale=None, chunk_size=None, ballnorm=False): # noqa: C901
+                deg=2, scale=None, chunk_size=None): # noqa: C901
         if initial_state is not None:
             raise NotImplementedError('Initial state not implemented')
 
@@ -207,12 +207,10 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
                 if gating:
                     log_G = log_G.repeat_interleave(qhead_ratio, dim=2)
             log_G_accum = log_G.cumsum(1) if log_G is not None else None
-            Y, _, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
+            Y, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
             assert Y.is_contiguous(), 'Y must be contiguous'
             out = unscale_ballnorm(Y, (rowmax - math.log(scale))[..., None])
             return out
-        if ballnorm:
-            raise NotImplementedError('Ballnorm not implemented for chunked attention, only for O(n²) attention')
 
         # Reshape into chunks
         Q = Q.view(b, n, c, hq, d)
@@ -255,7 +253,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
             V_flatbatch = V_flatbatch.repeat_interleave(qhead_ratio, dim=2)
             if gating:
                 log_G_intrachunk_accum_flatbatch = log_G_intrachunk_accum_flatbatch.repeat_interleave(qhead_ratio, dim=2)
-        attn_Y, _, rowmax = _attention(Q_flatbatch, K_flatbatch, V_flatbatch, log_G_intrachunk_accum_flatbatch, deg, scale)
+        attn_Y, rowmax = _attention(Q_flatbatch, K_flatbatch, V_flatbatch, log_G_intrachunk_accum_flatbatch, deg, scale)
         attn_Y = attn_Y.view(b, n, c, hq, d)
         rowmax = rowmax.view(b, n, c, hq).detach()
         rowmax = rowmax - math.log(scale)
@@ -282,7 +280,7 @@ power_full_reference = _make_power_full(UpdateStateImpl.REFERENCE, QueryStateImp
 
 power_full = _make_power_full(UpdateStateImpl.CUTLASS, QueryStateImpl.CUTLASS, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
 
-power_full_triton = _make_power_full(UpdateStateImpl.TRITON, QueryStateImpl.TRITON, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
+power_full_triton = _make_power_full(UpdateStateImpl.TRITON, QueryStateImpl.TRITON, DiscumsumImpl.CUTLASS, AttentionImpl.TRITON)
 
 ## Useful function to create sample inputs
 def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, device='cuda', gating=False,

@@ -94,15 +94,14 @@ class AttentionReference(torch.autograd.Function):
         ctx.normalize_output = normalize_output
         ctx.flash_equivalent = flash_equivalent
         ctx.normal_space = normal_space
-        return O, y, Z_rowmax.squeeze(-1).transpose(1, 2).contiguous()  # [b, t, h]
+        return O, Z_rowmax.squeeze(-1).transpose(1, 2).contiguous()  # [b, t, h]
 
     @staticmethod
-    def backward_impl(ctx, dO, dy, dZ_rowmax):
+    def backward_impl(ctx, dO, dZ_rowmax):
         """Reference implementation of the attention backward pass
         args:
             Q, K, V: [b, t, h, d]
             dO: [b, t, h, d]
-            dy: [b, t, h]
             dZ_rowmax: [b, t, h]
         returns:
             dQ: [b, t, h, d]
@@ -110,6 +109,8 @@ class AttentionReference(torch.autograd.Function):
             dV: [b, t, h, d]
             dS: [b, h, t, t]
         """
+        b, t, h, d = dO.shape
+        dy = torch.zeros(b, t, h, device=dO.device, dtype=torch.float32)
         dO, dy = dO.transpose(1, 2), dy.transpose(1, 2) # [b, h, t, d] and [b, h, t]
         Q, K, V, log_G, O = ctx.saved_tensors # [b, h, t, d]
 
