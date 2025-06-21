@@ -1,7 +1,8 @@
-from power_attention._update_state.fwd import update_state_fwd
-from power_attention._update_state.bwd import update_state_bwd
-from power_attention._update_state.reference import update_state_reference
-from power_attention._update_state.impl import update_state, create_inputs
-from power_attention._update_state.impl_triton import update_state as update_state_triton
+from power_attention._update_state.create_inputs import create_inputs, input_properties, output_properties
+from power_attention._update_state.reference import update_state as update_state_reference, update_state_fwd as update_state_reference_fwd
+from power_attention._update_state.reference_vidrial import update_state as update_state_vidrial_reference
+from power_attention._update_state.cuda import update_state as update_state_cuda
+from power_attention._update_state.triton import update_state as update_state_triton
+from power_attention._update_state.vidrial import update_state as update_state_vidrial, default_D as default_D
 
-__all__ = ['update_state', 'update_state_fwd', 'update_state_bwd', 'update_state_reference', 'update_state_triton', 'create_inputs']
+__all__ = ['create_inputs', 'input_properties', 'output_properties', 'update_state_reference', 'update_state_reference_fwd', 'update_state_cuda', 'update_state_triton', 'update_state_vidrial_reference', 'update_state_vidrial', 'default_D']

@@ -164,3 +164,90 @@ def print_tensor(tensor, indent=0, multi_idx=None):
             if i < tensor.shape[0] - 1:
                 print()
     
+
+def diff(a, b, rtol=None, atol=None, assert_close=True, verbose=True, title=None):
+    """ A diff function that helps debug numerical issues
+
+    Args:
+        a: torch.Tensor
+        b: torch.Tensor
+        rtol: float
+        atol: float
+        assert_close: bool
+        verbose: bool
+    Returns:
+        bool: True if a and b are close, False otherwise
+    """
+    a = a.to(torch.float32)
+    b = b.to(torch.float32)
+    if rtol is None: rtol = 1e-3
+    if atol is None: atol = 1e-5
+    equal = torch.allclose(a, b, rtol=rtol, atol=atol)
+    error_max = torch.max(torch.abs(a - b))
+    error_hist = torch.histc(torch.abs(a - b), bins=100, min=0, max=1)
+    
+    # Calculate absolute error
+    abs_diff = torch.abs(a - b)
+    total_elements = a.numel()
+    
+    # Calculate relative error where b is non-zero
+    b_nonzero = b != 0
+    rel_diff = torch.zeros_like(abs_diff)
+    rel_diff[b_nonzero] = abs_diff[b_nonzero] / torch.abs(b[b_nonzero])
+    
+    if verbose:
+        print('\n' * 3)
+        print('=' * 10 + f" {title} " + '=' * 10)
+        print(f"Max absolute error: {error_max.item()}")
+        print(f"Tensors are {'close' if equal else 'different'} according to torch.allclose")
+        
+        # Calculate thresholds for relative error table
+        rel_thresholds = torch.logspace(
+            torch.log10(torch.tensor(rtol)), 
+            0.0, 
+            steps=10
+        )
+        
+        # Calculate thresholds for absolute error table
+        abs_thresholds = torch.logspace(
+            torch.log10(torch.tensor(atol)), 
+            0.0, 
+            steps=10
+        )
+        
+        # Print relative error table
+        print("\nRelative Error Table:")
+        print("---------------------")
+        print(f"{'Threshold':<12} {'% matched':<12} {'Element Count':<12}")
+        print("-" * 36)
+        for threshold in rel_thresholds:
+            count = (rel_diff <= threshold).sum().item()
+            percentage = 100.0 * count / total_elements
+            print(f"{threshold.item():<12.6f} {percentage:<12.2f} {count:<12}")
+        
+        # Print absolute error table
+        print("\nAbsolute Error Table:")
+        print("---------------------")
+        print(f"{'Threshold':<12} {'% matched':<12} {'Element Count':<12}")
+        print("-" * 36)
+        for threshold in abs_thresholds:
+            count = (abs_diff <= threshold).sum().item()
+            percentage = 100.0 * count / total_elements
+            print(f"{threshold.item():<12.6f} {percentage:<12.2f} {count:<12}")
+        
+        # Print some examples of largest errors
+        if not equal:
+            n_samples = min(5, total_elements)
+            print("\nLargest Errors:")
+            flat_indices = torch.argsort(abs_diff.flatten(), descending=True)[:n_samples]
+            for i in range(n_samples):
+                idx = flat_indices[i]
+                multi_idx = torch.unravel_index(idx, a.shape)
+                multi_idx_str = ', '.join(map(str, [idx.item() for idx in multi_idx]))
+                print(f"Index [{multi_idx_str}]: a={a[multi_idx].item()}, b={b[multi_idx].item()}, "
+                      f"abs_diff={abs_diff[multi_idx].item()}, rel_diff={rel_diff[multi_idx].item()}")
+    
+    if assert_close:
+        assert equal, f"Tensors are not close! Max absolute error: {error_max.item()}"
+    
+    return equal

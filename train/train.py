@@ -48,7 +48,7 @@ disable_logging = False
 wandb_project = None
 # data
 data_root = os.path.expanduser('~/mai_datasets')
-dataset = 'ngpt_owt'
+dataset = 'shakespeare'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
@@ -243,7 +243,7 @@ if master_process and not disable_logging:
         name=run_name,
         info={'config': config},
         wandb_project=wandb_project,
-        server_url=f'http://log-cabin:8080/{getpass.getuser()}/api',
+        server_url=None,
     )
     print(f"\033[37mLogging as \033[34m{run_name}\033[37m.\033[0m")
 

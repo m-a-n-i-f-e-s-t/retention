@@ -156,4 +156,3 @@ def describe_gpu():
     gpu_name = torch.cuda.get_device_name(0).replace('NVIDIA ', '').replace('RTX ', '')
             
     return f"{gpu_count}x{gpu_name}"
-

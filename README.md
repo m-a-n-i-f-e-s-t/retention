@@ -118,6 +118,8 @@ The package uses pip's editable install mode for development. First, activate yo
 pip install -e .
 
 # Install development dependencies
+pip install psutil
+pip install flash_attn==2.7.3 --no-build-isolation
 pip install -e .[dev]
 ```
 
@@ -132,8 +134,9 @@ pytest
 Run benchmarks:
 
 ```bash
-python3 -m perf.create_report # will only run on clean commits
-python3 -m perf.plot_reports
+python -m perf.benchmark fwd          // Forward pass
+python -m perf.benchmark bwd          // Backward pass
+python -m perf.benchmark fwd+bwd      // Forward + backward pass
 ```
 
 ### Documentation
