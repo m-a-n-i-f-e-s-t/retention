@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from power_attention import power_full, power_full_triton
+from power_attention import power_full
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
@@ -97,11 +97,6 @@ class CausalSelfAttention(nn.Module):
             y = y.transpose(1, 2) # (B, T, nh, hs)
         elif self.attention_kernel == 'power':
             y = power_full(q.contiguous(), k.contiguous(), v.contiguous(), log_g,
-                deg=self.degree,
-                scale=1.0 / d**0.5,
-                chunk_size=self.chunk_size)
-        elif self.attention_kernel == 'power_triton':
-            y = power_full_triton(q.contiguous(), k.contiguous(), v.contiguous(), log_g,
                 deg=self.degree,
                 scale=1.0 / d**0.5,
                 chunk_size=self.chunk_size)

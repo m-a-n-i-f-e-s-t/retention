@@ -8,33 +8,33 @@ from power_attention_cuda import (
 )
 from power_attention._utils import dummify
 
-class SymmetricPowerUpdateStateReference(torch.autograd.Function):
-    @staticmethod
-    def expand(K, deg):
-        """ Reference implementation of key expansion
-        args:
-            K: [b, n, h, c d]
-            deg: int
-        returns:
-            phi_K: [b, n, h, c, D]
-        """
-        b, n, h, c, d = K.shape
-        K_outer = rearrange(K, 'b n h c (x o) -> b n h c x o', o=OuterBlock_DT)
-        K_inner = rearrange(K, 'b n h c (y i) -> b n h c y i', i=InnerBlock_DT)
-        phi_K_unmasked = torch.einsum('bnhcxo,bnhcyi->bnhcxyoi', K_outer, K_inner).to(K.dtype)
-        _, _, _, _, x, y, o, i = phi_K_unmasked.shape
-        phi_K_shape = (b, n, h, c, int((InnerBlock_DT // OuterBlock_DT + x) * y // 2), o, i)
-        phi_K = torch.empty(phi_K_shape, device=K.device, dtype=K.dtype)
-        idx = 0
-        for y_idx in range(y):
-            for x_idx in range(x):
-                if (x_idx * OuterBlock_DT) < (y_idx + 1) * InnerBlock_DT:
-                    multiplier = 1 if (x_idx + 1) * OuterBlock_DT > y_idx * InnerBlock_DT else 2
-                    phi_K[:, :, :, :, idx, :, :] = multiplier * phi_K_unmasked[:, :, :, :, x_idx, y_idx, :, :]
-                    idx += 1
-        phi_K = rearrange(phi_K, 'b n h c k o i -> b n h c (k o i)') # [b, n, h, c, D]
-        return phi_K.to(K.dtype)
+def reference_expand(K, deg):
+    """ Reference implementation of key expansion
+    args:
+        K: [b, n, h, c d]
+        deg: int
+    returns:
+        phi_K: [b, n, h, c, D]
+    """
+    assert deg == 2
+    b, n, h, c, d = K.shape
+    K_outer = rearrange(K, 'b n h c (x o) -> b n h c x o', o=OuterBlock_DT)
+    K_inner = rearrange(K, 'b n h c (y i) -> b n h c y i', i=InnerBlock_DT)
+    phi_K_unmasked = torch.einsum('bnhcxo,bnhcyi->bnhcxyoi', K_outer, K_inner).to(K.dtype)
+    _, _, _, _, x, y, o, i = phi_K_unmasked.shape
+    phi_K_shape = (b, n, h, c, int((InnerBlock_DT // OuterBlock_DT + x) * y // 2), o, i)
+    phi_K = torch.empty(phi_K_shape, device=K.device, dtype=K.dtype)
+    idx = 0
+    for y_idx in range(y):
+        for x_idx in range(x):
+            if (x_idx * OuterBlock_DT) < (y_idx + 1) * InnerBlock_DT:
+                multiplier = 1 if (x_idx + 1) * OuterBlock_DT > y_idx * InnerBlock_DT else 2
+                phi_K[:, :, :, :, idx, :, :] = multiplier * phi_K_unmasked[:, :, :, :, x_idx, y_idx, :, :]
+                idx += 1
+    phi_K = rearrange(phi_K, 'b n h c k o i -> b n h c (k o i)') # [b, n, h, c, D]
+    return phi_K.to(K.dtype)
 
+class SymmetricPowerUpdateStateReference(torch.autograd.Function):
     @staticmethod
     def forward(ctx, K, V, deg):
         """Reference implementation of the chunk state forward pass
@@ -43,25 +43,27 @@ class SymmetricPowerUpdateStateReference(torch.autograd.Function):
             K, V: [b, n, c, h, d]
         returns:
             S: [b, n, h, D, d]
+            N: [b, n, h, D]
         """
         b, n, c, h, d = K.shape
         K, V = K.transpose(2, 3), V.transpose(2, 3)  # [b, n, h, c, d]
 
-        phi_K = SymmetricPowerUpdateStateReference.expand(K, deg)
+        phi_K = reference_expand(K, deg)
         phi_K_T = phi_K.transpose(-1, -2) # [b, n, h, D, c]
+        N = torch.sum(phi_K_T.to(torch.float32), dim=-1)  # [b, n, h, D]
         S = torch.matmul(phi_K_T, V)  # [b, n, h, D, d]
         ctx.save_for_backward(K, V)
         ctx.d = d
         ctx.deg = deg
-        return S
+        return S, N
 
     @staticmethod
-    def backward(ctx, dS):
+    def backward(ctx, dS, dN):
         K, V = ctx.saved_tensors
 
-        phi_K = SymmetricPowerUpdateStateReference.expand(K, ctx.deg) # [b, n, h, c, D]
+        phi_K = reference_expand(K, ctx.deg) # [b, n, h, c, D]
         
-        dphi_K = V @ dS.transpose(-1, -2)  # [b, n, h, c, D]
+        dphi_K = V @ dS.transpose(-1, -2) + dN[..., None, :]  # [b, n, h, c, D]
         dV = (phi_K @ dS).transpose(2, 3)  # [b, n, c, h d]
 
         dK = torch.zeros(K.shape).to(K.device).to(K.dtype)
@@ -87,10 +89,10 @@ class SymmetricPowerUpdateStateReference(torch.autograd.Function):
         return dK, dV, None
 
 
-def update_state_reference(*args, **kwargs):
+def update_state(*args, **kwargs):
     if args and kwargs:
         raise ValueError("Cannot pass both args and kwargs")
     if kwargs:
         args = (kwargs['K'], kwargs['V'], kwargs['deg'])
     return SymmetricPowerUpdateStateReference.apply(*args)
-update_state_reference_fwd = dummify(SymmetricPowerUpdateStateReference.forward)
+update_state_fwd = dummify(SymmetricPowerUpdateStateReference.forward)

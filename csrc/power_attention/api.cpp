@@ -621,26 +621,6 @@ std::vector<at::Tensor> discumsum_bwd(const at::Tensor &discount, // batch_size 
         } \
     }()
 
-std::vector<at::Tensor> mosaic_sympow(const at::Tensor &K, const int deg, const int d_block) {
-    auto sizes = K.sizes();
-    TORCH_CHECK(sizes.size() == 2, "K must be 2-dimensional");
-    TORCH_CHECK(sizes[0] % d_block == 0, "K must have a divisible by d_block along the first dimension");
-    const auto T = sizes[0];
-    const auto d = sizes[1];
-
-    at::Tensor out;
-    DTYPE_SWITCH(K.dtype(), Elem_type, [&] {
-        d_switch(d, DIM, [&] {
-            dblock_switch(d_block, DIM_BLOCK, [&] {
-                static_assert(DIM != 128, "128 is not supported yet");
-                out = run_mosaic<Elem_type, DIM, DIM_BLOCK>(K);
-            });
-        });
-    });
-
-    return {out};
-}
-
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
@@ -653,7 +633,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("attention_bwd", &attention_bwd, "Backward pass attention");
     m.def("discumsum", &discumsum, "Discounted cumsum");
     m.def("discumsum_bwd", &discumsum_bwd, "Backward pass discounted cumsum");
-    m.def("mosaic_sympow", &mosaic_sympow, "Mosaic sympow");
 
     // Expose a C++ int through pybind11
     m.attr("InnerBlock_DT") = pybind11::int_(DLayout<KernelType::StateChunkFwd>::InnerBlock);

@@ -3,99 +3,10 @@
 
 ## IMPLEMENTATION ##
 import torch
-import torch.nn.functional as F
-from enum import Enum
-from torch.utils._pytree import tree_map
-from power_attention._attention import attention, attention_reference, attention_triton
-from power_attention._update_state import update_state, update_state_reference, update_state_triton
+from power_attention._attention import attention_cuda, attention_reference, attention_triton
+from power_attention._update_state import update_state_cuda, update_state_reference, update_state_triton, update_state_vidrial_reference, update_state_vidrial
 from power_attention._discumsum import discumsum, discumsum_reference
-from power_attention._query_state import query_state, query_state_reference, query_state_triton
-from power_attention._utils import compute_expanded_dim, unscale_ballnorm
-import math
-
-
-class UpdateStateImpl(Enum):
-    CUTLASS = 0
-    REFERENCE = 1
-    MATMUL = 2
-    TRITON = 3
-class QueryStateImpl(Enum):
-    CUTLASS = 0
-    REFERENCE = 1
-    MATMUL = 2
-    TRITON = 3
-class DiscumsumImpl(Enum):
-    CUTLASS = 0
-    REFERENCE = 1
-
-class AttentionImpl(Enum):
-    CUTLASS = 0
-    REFERENCE = 1
-    TRITON = 2
-
-def update_state_matmul(K, V, *args):
-    # K: [b,n,c,h,D]
-    # V: [b,n,c,h,d]
-    # Output: [b,n,h,D,d]
-    return torch.matmul(K.permute(0, 1, 3, 4, 2), V.transpose(2, 3))  # [b,n,h,D,d]
-
-def post_query_state(Y, rowmax, scale, zero_initial_state):
-    """Post-process the query state output with layernorm.
-    """
-    log_scale = torch.log(torch.tensor(1 / scale, device=rowmax.device, dtype=rowmax.dtype))
-    log_scale_attn = torch.min(log_scale, -rowmax)
-    if zero_initial_state:
-        log_scale_attn[:, 0:1] = -rowmax.narrow(1, 0, 1)
-    normed_Y = unscale_ballnorm(Y, -log_scale_attn[..., None])
-    return normed_Y
-
-def query_state_matmul(Q, S, attn_Y, rowmax, deg, scale, zero_initial_state):
-    """Query state implementation using matmul. This implementation is used when deg == 1.
-    Note that unlike the cutlass implementation, the final scaling doesn't discriminate between
-    the first chunk and the rest, because torch.compile doesn't work well with in-place operations.
-
-    Args:
-        Q: [b,n,c,h,D]
-        S: [b,n,h,D,d]
-        attn_Y: [b,n,c,h,d]
-        rowmax: [b,n,c,h]
-        deg: int
-        scale: float
-        zero_initial_state: bool
-    """
-    b, n, c, h, d = Q.shape
-    Y = torch.matmul(Q.to(Q.dtype).transpose(2, 3), S / scale).transpose(2, 3)  # [b,n,c,h,d]
-    scale_qs = torch.tensor(1 / scale, dtype=Q.dtype, device=Q.device)
-    scale_attn = torch.exp(-rowmax)
-    min_scale = torch.min(scale_qs, scale_attn)
-    qs_factor = min_scale / scale_qs
-    attn_factor = min_scale / scale_attn
-    if not zero_initial_state:
-        Y = attn_Y * attn_factor.unsqueeze(-1) + Y * qs_factor.unsqueeze(-1)
-    else:
-        Y[:, 0:1] = attn_Y.narrow(1, 0, 1)
-        Y[:, 1:] = attn_Y.narrow(1, 1, n - 1) * attn_factor.narrow(1, 1, n - 1).unsqueeze(-1) + Y.narrow(1, 1, n - 1) * qs_factor.narrow(1, 1, n - 1).unsqueeze(-1)
-    log_scale = torch.log(torch.tensor(1 / scale, device=rowmax.device, dtype=rowmax.dtype))
-    log_scale_attn = torch.min(log_scale, -rowmax)
-    if zero_initial_state:
-        log_scale_attn[:, 0:1] = -rowmax.narrow(1, 0, 1)
-    return unscale_ballnorm(Y, -log_scale_attn[..., None])
-
-IMPL_MAP = {
-    UpdateStateImpl.CUTLASS: update_state,
-    UpdateStateImpl.REFERENCE: update_state_reference,
-    UpdateStateImpl.TRITON: update_state_triton,
-    UpdateStateImpl.MATMUL: update_state_matmul,
-    QueryStateImpl.CUTLASS: query_state,
-    QueryStateImpl.REFERENCE: query_state_reference,
-    QueryStateImpl.TRITON: query_state_triton,
-    QueryStateImpl.MATMUL: query_state_matmul,
-    DiscumsumImpl.CUTLASS: discumsum,
-    DiscumsumImpl.REFERENCE: discumsum_reference,
-    AttentionImpl.CUTLASS: attention,
-    AttentionImpl.REFERENCE: attention_reference,
-    AttentionImpl.TRITON: attention_triton,
-}
+from power_attention._query_state import query_state_cuda, query_state_reference, query_state_triton, query_state_vidrial_reference, query_state_vidrial
 
 POWER_FULL_DOC = r"""
 Compute symmetric power attention with optional chunking.
@@ -143,6 +54,7 @@ Args:
     chunk_size: Size of chunks for processing long sequences.
         If None, uses O(n²) attention formulation.
         If set, uses O(n) RNN formulation with chunked computation.
+    temporal: Whether to use temporal normalization. Disabling this can hurt learning performance but may run a bit faster.
 
 Returns:
     torch.Tensor: Output tensor of shape `(batch_size, seq_len, num_q_heads, head_dim)`.
@@ -161,22 +73,17 @@ References:
 """
 
 
-def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: QueryStateImpl, discumsum_impl: DiscumsumImpl, attention_impl: AttentionImpl):
+def _make_power_full(update_state_impl, query_state_impl, discumsum_impl, attention_impl):
     """ Create a power_full function with the given implementations.
     """
-    def _power_full(Q, K, V, log_G=None, initial_state=None,
-                deg=2, scale=None, chunk_size=None): # noqa: C901
-        if initial_state is not None:
-            raise NotImplementedError('Initial state not implemented')
-
-        if deg == 1: # when deg == 1, update_state and query_state are essentially matmuls
-            _update_state = IMPL_MAP[UpdateStateImpl.MATMUL]
-            _query_state = IMPL_MAP[QueryStateImpl.MATMUL]
-        else:
-            _update_state = IMPL_MAP[update_state_impl]
-            _query_state = IMPL_MAP[query_state_impl]
-        _discumsum = IMPL_MAP[discumsum_impl]
-        _attention = IMPL_MAP[attention_impl]
+    def _power_full(Q, K, V, log_G=None, initial_state=None, return_final_state=False,
+                    deg=2, scale=None, chunk_size=None): # noqa: C901
+        assert deg % 2 == 0, f'deg must be even: {deg=}'
+        
+        _update_state = update_state_impl
+        _query_state = query_state_impl
+        _discumsum = discumsum_impl
+        _attention = attention_impl
         
         # Establish shapes and dtypes
         assert Q.dtype == K.dtype == V.dtype, 'dtypes of inputs must match'
@@ -199,7 +106,7 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
         if not scale:
             scale = 1.0 / d**0.5
 
-        # Quick return for simple quadratic attention
+        # --- Simple quadratic attention ---
         if t <= c:
             if qhead_ratio > 1:
                 K = K.repeat_interleave(qhead_ratio, dim=2)
@@ -207,106 +114,101 @@ def _make_power_full(update_state_impl: UpdateStateImpl, query_state_impl: Query
                 if gating:
                     log_G = log_G.repeat_interleave(qhead_ratio, dim=2)
             log_G_accum = log_G.cumsum(1) if log_G is not None else None
-            Y, rowmax = _attention(Q, K, V, log_G_accum, deg, scale)
-            assert Y.is_contiguous(), 'Y must be contiguous'
-            out = unscale_ballnorm(Y, (rowmax - math.log(scale))[..., None])
-            return out
+            out = _attention(Q, K, V, log_G_accum, deg, scale=scale, norm=True)
+            if not return_final_state:
+                return out
+            else:
+                if gating:
+                    log_discount_weights = (log_G_accum.narrow(1, c-1, 1) - log_G_accum) / deg
+                    cs_K = K * torch.exp(log_discount_weights).unsqueeze(-1).to(K.dtype)
+                S_final = _update_state(cs_K.unsqueeze(1).contiguous(), V.unsqueeze(1).contiguous(), deg)[:,-1]
+                if initial_state is not None:
+                    S_final += initial_state
+                return out, S_final
 
-        # Reshape into chunks
+        # --- Reshape into chunks ---
         Q = Q.view(b, n, c, hq, d)
         K = K.view(b, n, c, h, d)
         V = V.view(b, n, c, h, d)    
         if gating:
-            log_G = log_G.view(b, n, c, h).to(torch.float32)
+            log_G = log_G.view(b, n, c, h)
             log_G_intrachunk_accum = log_G.cumsum(2)
 
-        # Compute chunk states
+        # --- Update State ---
         if gating:
             log_discount_weights = (log_G_intrachunk_accum.narrow(2, c-1, 1) - log_G_intrachunk_accum) / deg
             cs_K = K * torch.exp(log_discount_weights).unsqueeze(-1).to(K.dtype)
         else:
             cs_K = K
-        S = _update_state(cs_K.contiguous(), V.contiguous(), deg)
+        S, s = _update_state(cs_K.contiguous(), V.contiguous(), deg)
 
-        # Accumulate
+        # TODO(sean): properly handle initial state gating
+        if initial_state is not None:
+            S = torch.cat([initial_state.unsqueeze(1), S], dim=1) # n + 1 chunks
+
+        # --- Accumulate ---
         if gating:
             log_G_chunk_sum = log_G_intrachunk_accum[:,:,-1].contiguous()
         else:
             log_G_chunk_sum = torch.zeros(size=(b, n, h), device=Q.device, dtype=torch.float32)
         S = _discumsum(S, log_G_chunk_sum) # Note that this adds an empty chunk to the start of the sequence
-        S = S.narrow(1, 0, n)
+        S = S.narrow(1, 0 if initial_state is None else 1, n)
+        s = _discumsum(s, log_G_chunk_sum)
+        s = s.narrow(1, 0, n)
+        if return_final_state:
+            final_state = S[:,-1]
 
-        # Restrict to non-initial chunks for recurrent outputs
-        Q = Q.contiguous()
-        K = K.contiguous()
-        V = V.contiguous()
+        # --- Merge chunks for attention ---
+        Q, K, V = map(lambda x: x.contiguous(), (Q, K, V))
         if gating:
             log_G_intrachunk_accum = log_G_intrachunk_accum.contiguous()
 
-        # Compute attention
+        # TODO(sean): fuse the qhead ratio into attention kernel, it already supports it
         Q_flatbatch = Q.view(b*n, c, hq, d)
         K_flatbatch = K.view(b*n, c, h, d)
-        V_flatbatch = V.view(b*n, c, h, d)    
+        V_flatbatch = V.view(b*n, c, h, d)
         log_G_intrachunk_accum_flatbatch = log_G_intrachunk_accum.view(b*n, c, h) if gating else None
         if qhead_ratio > 1:
             K_flatbatch = K_flatbatch.repeat_interleave(qhead_ratio, dim=2)
             V_flatbatch = V_flatbatch.repeat_interleave(qhead_ratio, dim=2)
             if gating:
                 log_G_intrachunk_accum_flatbatch = log_G_intrachunk_accum_flatbatch.repeat_interleave(qhead_ratio, dim=2)
-        attn_Y, rowmax = _attention(Q_flatbatch, K_flatbatch, V_flatbatch, log_G_intrachunk_accum_flatbatch, deg, scale)
-        attn_Y = attn_Y.view(b, n, c, hq, d)
-        rowmax = rowmax.view(b, n, c, hq).detach()
-        rowmax = rowmax - math.log(scale)
 
+        # --- Compute attention ---
+        attn_Y, l_attn, rowmax = _attention(Q_flatbatch, K_flatbatch, V_flatbatch, log_G_intrachunk_accum_flatbatch, deg, scale=scale, norm=False)
+        attn_Y, l_attn, rowmax = map(lambda x: x.view(b, n, *x.shape[1:]), (attn_Y, l_attn, rowmax)) # [b, n, c, hq ...]
+        # --- Gate Query for Query State ---
         if gating:
             if qhead_ratio > 1:
                 log_G_intrachunk_accum = log_G_intrachunk_accum.repeat_interleave(qhead_ratio, dim=3)
             Q = Q * torch.exp(log_G_intrachunk_accum / deg).unsqueeze(-1).to(Q.dtype)
         if qhead_ratio > 1:
             S = S.repeat_interleave(qhead_ratio, dim=2)
-        D = float(compute_expanded_dim(d, deg))
-        Y = _query_state(Q.contiguous(), S.contiguous(), attn_Y.contiguous(), rowmax.contiguous(), deg, D, initial_state is None)
-        if deg > 1: # TODO(sean) remove this when generical-p kernel is ready
-            Y = post_query_state(Y, rowmax, D, initial_state is None)
+
+        # --- Compute Query State ---
+        Q, S, s, attn_Y, l_attn, rowmax = map(lambda x: x.contiguous(), (Q, S, s, attn_Y, l_attn, rowmax))
+        Y = _query_state(Q, S, s, attn_Y, l_attn, rowmax, deg, scale, initial_state is None)
 
         # Epilogue
         out = Y.contiguous().view(b, t, hq, d).to(dtype)
-        return out
+        if return_final_state:
+            return out, final_state
+        else:
+            return out
 
     _power_full.__doc__ = POWER_FULL_DOC
     return _power_full
 
-power_full_reference = _make_power_full(UpdateStateImpl.REFERENCE, QueryStateImpl.REFERENCE, DiscumsumImpl.REFERENCE, AttentionImpl.REFERENCE)
-
-power_full = _make_power_full(UpdateStateImpl.CUTLASS, QueryStateImpl.CUTLASS, DiscumsumImpl.CUTLASS, AttentionImpl.CUTLASS)
-
-power_full_triton = _make_power_full(UpdateStateImpl.TRITON, QueryStateImpl.TRITON, DiscumsumImpl.CUTLASS, AttentionImpl.TRITON)
-
-## Useful function to create sample inputs
-def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, device='cuda', gating=False,
-                  chunk_size=None, deg=2, requires_grad=False, seed=42):
-    torch.manual_seed(seed)
-    Q = torch.randn(size=(b, t, h * qhead_ratio, d), dtype=dtype, device=device) / math.sqrt(d)
-    K = torch.randn(size=(b, t, h, d), dtype=dtype, device=device) / math.sqrt(d)
-    V = torch.randn(size=(b, t, h, d), dtype=dtype, device=device) / math.sqrt(d)
-    if gating:
-        log_G = F.logsigmoid(torch.randn(size=(b, t, h), dtype=torch.float32, device=device))
-    else:
-        log_G = None
-    initial_state = None
-    scale = 1.0
-    if requires_grad:
-        Q, K, V, log_G, initial_state = tree_map(
-            lambda x: x.requires_grad_(True) if x is not None else None, (Q, K, V, log_G, initial_state))
-    return dict(Q=Q, K=K, V=V, log_G=log_G, 
-                initial_state=initial_state,
-                deg=deg, scale=scale,
-                chunk_size=chunk_size)
-
+power_full = power_full_triton = _make_power_full(update_state_triton, query_state_triton, discumsum, attention_triton)
+power_full_cuda = _make_power_full(update_state_cuda, query_state_cuda, discumsum, attention_cuda)
+power_full_reference = _make_power_full(update_state_reference, query_state_reference, discumsum_reference, attention_reference)
+power_full_vidrial_reference = _make_power_full(update_state_vidrial_reference, query_state_vidrial_reference, discumsum_reference, attention_reference)
+power_full_vidrial = _make_power_full(update_state_vidrial, query_state_vidrial, discumsum_reference, attention_triton)
 
 ## TUTORIAL ##
 if __name__ == '__main__':
     from perf._inspect import print_runtime
+    from power_attention.create_inputs import create_inputs
 
     # Create inputs
     t = 1024

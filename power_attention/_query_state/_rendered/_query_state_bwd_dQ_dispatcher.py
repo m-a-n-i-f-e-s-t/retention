@@ -1,16 +1,23 @@
 import triton
 import triton.language as tl
 
-def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero_initial_state,
-                     stride_qb, stride_qt, stride_qh, stride_qd,
-                     stride_sb, stride_sh, stride_sD, stride_se,
-                     stride_mb, stride_mt, stride_mh,
-                     stride_dob, stride_dot, stride_doh, stride_doe,
-                     stride_dyb, stride_dyt, stride_dyh, stride_dye,
-                     stride_dqb, stride_dqt, stride_dqh, stride_dqd,
-                     n, h, c, d: tl.constexpr, D: tl.constexpr, e: tl.constexpr,
-                     block1: tl.constexpr, BLOCK_T: tl.constexpr, 
-                     BLOCK_D: tl.constexpr):
+def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
+                        stride_qb, stride_qt, stride_qh, stride_qd,
+                        stride_sb, stride_sh, stride_sD, stride_se,
+                        stride_skb, stride_skh, stride_skD,
+                        stride_dob, stride_dot, stride_doh, stride_doe,
+                        stride_db, stride_dt, stride_dh,
+                        stride_mb, stride_mt, stride_mh,
+                        stride_lb, stride_lt, stride_lh,
+                        stride_dqb, stride_dqt, stride_dqh, stride_dqd,
+                        stride_dyb, stride_dyt, stride_dyh, stride_dye,
+                        stride_dlb, stride_dlt, stride_dlh,
+                        n, h, c, d: tl.constexpr, D, e: tl.constexpr,
+                        zero_initial_state: tl.constexpr,
+                        deg: tl.constexpr,
+                        scale_p,
+                        block1: tl.constexpr, BLOCK_T: tl.constexpr, 
+                        BLOCK_D: tl.constexpr):
     block2: tl.constexpr = BLOCK_D // block1
     if ((BLOCK_D == 16) and ((BLOCK_T == 128) and ((block1 == 16)))) or ((BLOCK_D == 16) and ((BLOCK_T == 256) and ((block1 == 16)))):
         
@@ -22,34 +29,51 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
             
             Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
             S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
+            SK += off_bn.to(tl.int64) * stride_skb + off_h.to(tl.int64) * stride_skh
             dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
             dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
+            Delta += off_bn.to(tl.int64) * stride_db + off_h.to(tl.int64) * stride_dh
+            M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+            L += off_bn.to(tl.int64) * stride_lb + off_h.to(tl.int64) * stride_lh
+            dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
+            dL_attn += off_bn.to(tl.int64) * stride_dlb + off_h.to(tl.int64) * stride_dlh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
-            do = tl.load(p_do) # [BLOCK_T x e]
+            p_m = M + range_t * stride_mt
+            p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+            p_l = L + range_t * stride_lt
+            p_dl_attn = dL_attn + range_t * stride_dlt
             
-            if dY_attn is not None:
-                M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
-                p_m = M + range_t * stride_mt
-                rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            # --- compute dl_attn ---
+            rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            l = tl.load(p_l, mask=range_t < c, other=float('inf'))
+            p_delta = Delta + range_t * stride_dt
+            delta = tl.load(p_delta, mask=range_t < c, other=0.)
             
-                chunk_id = off_bn % n
-                dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-                p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
-                if (chunk_id > 0 or (not zero_initial_state)):
-                    attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
-                    dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
-                    tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
-                else:
-                    tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
-            
-                qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-                do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+            chunk_id = off_bn % n
+            if (chunk_id == 0 and zero_initial_state):
+                gamma = 1.0
+                gamma = gamma.to(tl.float32)
             else:
-                do = (do * scale).to(Q.dtype.element_ty)
+                gamma = tl.sqrt(D).to(tl.float32)
+            m = tl.exp(rowmax)
+            alpha = tl.maximum(gamma, m) # BLOCK_T
+            qs_factor = scale_p / alpha / l # BLOCK_T
+            attn_factor = m / alpha / l # BLOCK_T
+            dl_attn = -attn_factor * delta # BLOCK_T
+            tl.store(p_dl_attn, dl_attn, mask=range_t < c)
+            
+            # --- compute dY_attn ---
+            do = tl.load(p_do) # [BLOCK_T x e]
+            dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
+            tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
+            
+            # --- compute dQ ---
+            do = (do * qs_factor[:, None]).to(Q.dtype.element_ty) # [BLOCK_T x BLOCK_E_VALID]
+            delta = delta * qs_factor # BLOCK_T
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -65,10 +89,12 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD # [block1]
                     q_d2_0 = tl.load(p_q_d2_0, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_0 = tl.load(p_sT_0) # [BLOCK_E_VALID x block1]
+                    sk_0 = tl.load(p_sk_0) # [block1]
                     
-                    dpq_0 = tl.dot(do, sT_0) # [BLOCK_T x block1]
+                    dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     else:
@@ -96,34 +122,51 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
             
             Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
             S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
+            SK += off_bn.to(tl.int64) * stride_skb + off_h.to(tl.int64) * stride_skh
             dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
             dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
+            Delta += off_bn.to(tl.int64) * stride_db + off_h.to(tl.int64) * stride_dh
+            M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+            L += off_bn.to(tl.int64) * stride_lb + off_h.to(tl.int64) * stride_lh
+            dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
+            dL_attn += off_bn.to(tl.int64) * stride_dlb + off_h.to(tl.int64) * stride_dlh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
-            do = tl.load(p_do) # [BLOCK_T x e]
+            p_m = M + range_t * stride_mt
+            p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+            p_l = L + range_t * stride_lt
+            p_dl_attn = dL_attn + range_t * stride_dlt
             
-            if dY_attn is not None:
-                M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
-                p_m = M + range_t * stride_mt
-                rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            # --- compute dl_attn ---
+            rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            l = tl.load(p_l, mask=range_t < c, other=float('inf'))
+            p_delta = Delta + range_t * stride_dt
+            delta = tl.load(p_delta, mask=range_t < c, other=0.)
             
-                chunk_id = off_bn % n
-                dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-                p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
-                if (chunk_id > 0 or (not zero_initial_state)):
-                    attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
-                    dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
-                    tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
-                else:
-                    tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
-            
-                qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-                do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+            chunk_id = off_bn % n
+            if (chunk_id == 0 and zero_initial_state):
+                gamma = 1.0
+                gamma = gamma.to(tl.float32)
             else:
-                do = (do * scale).to(Q.dtype.element_ty)
+                gamma = tl.sqrt(D).to(tl.float32)
+            m = tl.exp(rowmax)
+            alpha = tl.maximum(gamma, m) # BLOCK_T
+            qs_factor = scale_p / alpha / l # BLOCK_T
+            attn_factor = m / alpha / l # BLOCK_T
+            dl_attn = -attn_factor * delta # BLOCK_T
+            tl.store(p_dl_attn, dl_attn, mask=range_t < c)
+            
+            # --- compute dY_attn ---
+            do = tl.load(p_do) # [BLOCK_T x e]
+            dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
+            tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
+            
+            # --- compute dQ ---
+            do = (do * qs_factor[:, None]).to(Q.dtype.element_ty) # [BLOCK_T x BLOCK_E_VALID]
+            delta = delta * qs_factor # BLOCK_T
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -141,10 +184,12 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD # [block1]
                     q_d2_0 = tl.load(p_q_d2_0, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_0 = tl.load(p_sT_0) # [BLOCK_E_VALID x block1]
+                    sk_0 = tl.load(p_sk_0) # [block1]
                     
-                    dpq_0 = tl.dot(do, sT_0) # [BLOCK_T x block1]
+                    dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     elif m == 1:
@@ -186,34 +231,51 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
             
             Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
             S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
+            SK += off_bn.to(tl.int64) * stride_skb + off_h.to(tl.int64) * stride_skh
             dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
             dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
+            Delta += off_bn.to(tl.int64) * stride_db + off_h.to(tl.int64) * stride_dh
+            M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+            L += off_bn.to(tl.int64) * stride_lb + off_h.to(tl.int64) * stride_lh
+            dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
+            dL_attn += off_bn.to(tl.int64) * stride_dlb + off_h.to(tl.int64) * stride_dlh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
-            do = tl.load(p_do) # [BLOCK_T x e]
+            p_m = M + range_t * stride_mt
+            p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+            p_l = L + range_t * stride_lt
+            p_dl_attn = dL_attn + range_t * stride_dlt
             
-            if dY_attn is not None:
-                M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
-                p_m = M + range_t * stride_mt
-                rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            # --- compute dl_attn ---
+            rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            l = tl.load(p_l, mask=range_t < c, other=float('inf'))
+            p_delta = Delta + range_t * stride_dt
+            delta = tl.load(p_delta, mask=range_t < c, other=0.)
             
-                chunk_id = off_bn % n
-                dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-                p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
-                if (chunk_id > 0 or (not zero_initial_state)):
-                    attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
-                    dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
-                    tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
-                else:
-                    tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
-            
-                qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-                do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+            chunk_id = off_bn % n
+            if (chunk_id == 0 and zero_initial_state):
+                gamma = 1.0
+                gamma = gamma.to(tl.float32)
             else:
-                do = (do * scale).to(Q.dtype.element_ty)
+                gamma = tl.sqrt(D).to(tl.float32)
+            m = tl.exp(rowmax)
+            alpha = tl.maximum(gamma, m) # BLOCK_T
+            qs_factor = scale_p / alpha / l # BLOCK_T
+            attn_factor = m / alpha / l # BLOCK_T
+            dl_attn = -attn_factor * delta # BLOCK_T
+            tl.store(p_dl_attn, dl_attn, mask=range_t < c)
+            
+            # --- compute dY_attn ---
+            do = tl.load(p_do) # [BLOCK_T x e]
+            dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
+            tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
+            
+            # --- compute dQ ---
+            do = (do * qs_factor[:, None]).to(Q.dtype.element_ty) # [BLOCK_T x BLOCK_E_VALID]
+            delta = delta * qs_factor # BLOCK_T
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -235,10 +297,12 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD # [block1]
                     q_d2_0 = tl.load(p_q_d2_0, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_0 = tl.load(p_sT_0) # [BLOCK_E_VALID x block1]
+                    sk_0 = tl.load(p_sk_0) # [block1]
                     
-                    dpq_0 = tl.dot(do, sT_0) # [BLOCK_T x block1]
+                    dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     elif m == 1:
@@ -309,34 +373,51 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
             
             Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
             S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
+            SK += off_bn.to(tl.int64) * stride_skb + off_h.to(tl.int64) * stride_skh
             dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
             dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
+            Delta += off_bn.to(tl.int64) * stride_db + off_h.to(tl.int64) * stride_dh
+            M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+            L += off_bn.to(tl.int64) * stride_lb + off_h.to(tl.int64) * stride_lh
+            dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
+            dL_attn += off_bn.to(tl.int64) * stride_dlb + off_h.to(tl.int64) * stride_dlh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
-            do = tl.load(p_do) # [BLOCK_T x e]
+            p_m = M + range_t * stride_mt
+            p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+            p_l = L + range_t * stride_lt
+            p_dl_attn = dL_attn + range_t * stride_dlt
             
-            if dY_attn is not None:
-                M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
-                p_m = M + range_t * stride_mt
-                rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            # --- compute dl_attn ---
+            rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            l = tl.load(p_l, mask=range_t < c, other=float('inf'))
+            p_delta = Delta + range_t * stride_dt
+            delta = tl.load(p_delta, mask=range_t < c, other=0.)
             
-                chunk_id = off_bn % n
-                dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-                p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
-                if (chunk_id > 0 or (not zero_initial_state)):
-                    attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
-                    dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
-                    tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
-                else:
-                    tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
-            
-                qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-                do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+            chunk_id = off_bn % n
+            if (chunk_id == 0 and zero_initial_state):
+                gamma = 1.0
+                gamma = gamma.to(tl.float32)
             else:
-                do = (do * scale).to(Q.dtype.element_ty)
+                gamma = tl.sqrt(D).to(tl.float32)
+            m = tl.exp(rowmax)
+            alpha = tl.maximum(gamma, m) # BLOCK_T
+            qs_factor = scale_p / alpha / l # BLOCK_T
+            attn_factor = m / alpha / l # BLOCK_T
+            dl_attn = -attn_factor * delta # BLOCK_T
+            tl.store(p_dl_attn, dl_attn, mask=range_t < c)
+            
+            # --- compute dY_attn ---
+            do = tl.load(p_do) # [BLOCK_T x e]
+            dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
+            tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
+            
+            # --- compute dQ ---
+            do = (do * qs_factor[:, None]).to(Q.dtype.element_ty) # [BLOCK_T x BLOCK_E_VALID]
+            delta = delta * qs_factor # BLOCK_T
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -352,21 +433,25 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD # [block1]
                     
                     p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
                     p_sT_1 = S + (range_d1[None, :] + off_D + 1 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_1 = SK + (range_d1 + off_D + 1 * block1) * stride_skD # [block1]
                     q_d2_0 = tl.load(p_q_d2_0, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_0 = tl.load(p_sT_0) # [BLOCK_E_VALID x block1]
+                    sk_0 = tl.load(p_sk_0) # [block1]
                     q_d2_1 = tl.load(p_q_d2_1, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_1 = tl.load(p_sT_1) # [BLOCK_E_VALID x block1]
+                    sk_1 = tl.load(p_sk_1) # [block1]
                     
-                    dpq_0 = tl.dot(do, sT_0) # [BLOCK_T x block1]
+                    dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_1 += dpq_0 * q_d2_0[:, None]
                     
-                    dpq_1 = tl.dot(do, sT_1) # [BLOCK_T x block1]
+                    dpq_1 = tl.dot(do, sT_1) - delta[:, None] * sk_1[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_1 * q_d2_1[:, None]
                     else:
@@ -402,34 +487,51 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
             
             Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
             S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
+            SK += off_bn.to(tl.int64) * stride_skb + off_h.to(tl.int64) * stride_skh
             dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
             dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
+            Delta += off_bn.to(tl.int64) * stride_db + off_h.to(tl.int64) * stride_dh
+            M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+            L += off_bn.to(tl.int64) * stride_lb + off_h.to(tl.int64) * stride_lh
+            dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
+            dL_attn += off_bn.to(tl.int64) * stride_dlb + off_h.to(tl.int64) * stride_dlh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
-            do = tl.load(p_do) # [BLOCK_T x e]
+            p_m = M + range_t * stride_mt
+            p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+            p_l = L + range_t * stride_lt
+            p_dl_attn = dL_attn + range_t * stride_dlt
             
-            if dY_attn is not None:
-                M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
-                p_m = M + range_t * stride_mt
-                rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            # --- compute dl_attn ---
+            rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            l = tl.load(p_l, mask=range_t < c, other=float('inf'))
+            p_delta = Delta + range_t * stride_dt
+            delta = tl.load(p_delta, mask=range_t < c, other=0.)
             
-                chunk_id = off_bn % n
-                dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-                p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
-                if (chunk_id > 0 or (not zero_initial_state)):
-                    attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
-                    dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
-                    tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
-                else:
-                    tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
-            
-                qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-                do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+            chunk_id = off_bn % n
+            if (chunk_id == 0 and zero_initial_state):
+                gamma = 1.0
+                gamma = gamma.to(tl.float32)
             else:
-                do = (do * scale).to(Q.dtype.element_ty)
+                gamma = tl.sqrt(D).to(tl.float32)
+            m = tl.exp(rowmax)
+            alpha = tl.maximum(gamma, m) # BLOCK_T
+            qs_factor = scale_p / alpha / l # BLOCK_T
+            attn_factor = m / alpha / l # BLOCK_T
+            dl_attn = -attn_factor * delta # BLOCK_T
+            tl.store(p_dl_attn, dl_attn, mask=range_t < c)
+            
+            # --- compute dY_attn ---
+            do = tl.load(p_do) # [BLOCK_T x e]
+            dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
+            tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
+            
+            # --- compute dQ ---
+            do = (do * qs_factor[:, None]).to(Q.dtype.element_ty) # [BLOCK_T x BLOCK_E_VALID]
+            delta = delta * qs_factor # BLOCK_T
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -447,15 +549,19 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD # [block1]
                     
                     p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
                     p_sT_1 = S + (range_d1[None, :] + off_D + 1 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_1 = SK + (range_d1 + off_D + 1 * block1) * stride_skD # [block1]
                     q_d2_0 = tl.load(p_q_d2_0, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_0 = tl.load(p_sT_0) # [BLOCK_E_VALID x block1]
+                    sk_0 = tl.load(p_sk_0) # [block1]
                     q_d2_1 = tl.load(p_q_d2_1, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_1 = tl.load(p_sT_1) # [BLOCK_E_VALID x block1]
+                    sk_1 = tl.load(p_sk_1) # [block1]
                     
-                    dpq_0 = tl.dot(do, sT_0) # [BLOCK_T x block1]
+                    dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     elif m == 1:
@@ -465,7 +571,7 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     else:
                         dq_3 += dpq_0 * q_d2_0[:, None]
                     
-                    dpq_1 = tl.dot(do, sT_1) # [BLOCK_T x block1]
+                    dpq_1 = tl.dot(do, sT_1) - delta[:, None] * sk_1[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_1 * q_d2_1[:, None]
                     elif m == 1:
@@ -521,34 +627,51 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
             
             Q += off_bn.to(tl.int64) * stride_qb + off_h.to(tl.int64) * stride_qh
             S += off_bn.to(tl.int64) * stride_sb + off_h.to(tl.int64) * stride_sh
+            SK += off_bn.to(tl.int64) * stride_skb + off_h.to(tl.int64) * stride_skh
             dO += off_bn.to(tl.int64) * stride_dob + off_h.to(tl.int64) * stride_doh
             dQ += off_bn.to(tl.int64) * stride_dqb + off_h.to(tl.int64) * stride_dqh
+            Delta += off_bn.to(tl.int64) * stride_db + off_h.to(tl.int64) * stride_dh
+            M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
+            L += off_bn.to(tl.int64) * stride_lb + off_h.to(tl.int64) * stride_lh
+            dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
+            dL_attn += off_bn.to(tl.int64) * stride_dlb + off_h.to(tl.int64) * stride_dlh
             
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
             p_do = dO + range_t[:, None] * stride_dot + range_e[None, :] * stride_doe # [BLOCK_T x e]
-            do = tl.load(p_do) # [BLOCK_T x e]
+            p_m = M + range_t * stride_mt
+            p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
+            p_l = L + range_t * stride_lt
+            p_dl_attn = dL_attn + range_t * stride_dlt
             
-            if dY_attn is not None:
-                M += off_bn.to(tl.int64) * stride_mb + off_h.to(tl.int64) * stride_mh
-                p_m = M + range_t * stride_mt
-                rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            # --- compute dl_attn ---
+            rowmax = tl.load(p_m, mask=range_t < c, other=-float('inf'))
+            l = tl.load(p_l, mask=range_t < c, other=float('inf'))
+            p_delta = Delta + range_t * stride_dt
+            delta = tl.load(p_delta, mask=range_t < c, other=0.)
             
-                chunk_id = off_bn % n
-                dY_attn += off_bn.to(tl.int64) * stride_dyb + off_h.to(tl.int64) * stride_dyh
-                p_dy_attn = dY_attn + range_t[:, None] * stride_dyt + range_e[None, :] * stride_dye # [BLOCK_T x e]
-                if (chunk_id > 0 or (not zero_initial_state)):
-                    attn_factor = tl.minimum(scale/tl.exp(-rowmax), 1.0)
-                    dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty)
-                    tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
-                else:
-                    tl.store(p_dy_attn, do, mask=(range_t < c)[:, None])
-            
-                qs_factor = tl.minimum(tl.exp(-rowmax), scale)
-                do = (do * qs_factor[:, None]).to(Q.dtype.element_ty)
+            chunk_id = off_bn % n
+            if (chunk_id == 0 and zero_initial_state):
+                gamma = 1.0
+                gamma = gamma.to(tl.float32)
             else:
-                do = (do * scale).to(Q.dtype.element_ty)
+                gamma = tl.sqrt(D).to(tl.float32)
+            m = tl.exp(rowmax)
+            alpha = tl.maximum(gamma, m) # BLOCK_T
+            qs_factor = scale_p / alpha / l # BLOCK_T
+            attn_factor = m / alpha / l # BLOCK_T
+            dl_attn = -attn_factor * delta # BLOCK_T
+            tl.store(p_dl_attn, dl_attn, mask=range_t < c)
+            
+            # --- compute dY_attn ---
+            do = tl.load(p_do) # [BLOCK_T x e]
+            dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
+            tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
+            
+            # --- compute dQ ---
+            do = (do * qs_factor[:, None]).to(Q.dtype.element_ty) # [BLOCK_T x BLOCK_E_VALID]
+            delta = delta * qs_factor # BLOCK_T
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
@@ -570,15 +693,19 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD # [block1]
                     
                     p_q_d2_1 = Q + range_t[:] * stride_qt + (off_d2 + 1) * stride_qd # [BLOCK_T]
                     p_sT_1 = S + (range_d1[None, :] + off_D + 1 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
+                    p_sk_1 = SK + (range_d1 + off_D + 1 * block1) * stride_skD # [block1]
                     q_d2_0 = tl.load(p_q_d2_0, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_0 = tl.load(p_sT_0) # [BLOCK_E_VALID x block1]
+                    sk_0 = tl.load(p_sk_0) # [block1]
                     q_d2_1 = tl.load(p_q_d2_1, mask=(range_t < c), other=0.) # [BLOCK_T]
                     sT_1 = tl.load(p_sT_1) # [BLOCK_E_VALID x block1]
+                    sk_1 = tl.load(p_sk_1) # [block1]
                     
-                    dpq_0 = tl.dot(do, sT_0) # [BLOCK_T x block1]
+                    dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     elif m == 1:
@@ -596,7 +723,7 @@ def _query_state_bwd_dQ(Q, S, M, dO, dQ, dY_attn, deg: tl.constexpr, scale, zero
                     else:
                         dq_7 += dpq_0 * q_d2_0[:, None]
                     
-                    dpq_1 = tl.dot(do, sT_1) # [BLOCK_T x block1]
+                    dpq_1 = tl.dot(do, sT_1) - delta[:, None] * sk_1[None, :] # [BLOCK_T x block1]
                     if m == 0:
                         dq_0 += dpq_1 * q_d2_1[:, None]
                     elif m == 1:

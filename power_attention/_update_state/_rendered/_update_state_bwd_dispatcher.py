@@ -1,10 +1,11 @@
 import triton
 import triton.language as tl
 
-def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
+def _update_state_bwd(K, V, dS, dN, dK, dV, deg: tl.constexpr,
                       stride_kb, stride_kt, stride_kh, stride_kd,
                       stride_vb, stride_vt, stride_vh, stride_ve,
                       stride_dsb, stride_dsh, stride_dsD, stride_dse,
+                      stride_dnb, stride_dnh, stride_dnD,
                       stride_dkb, stride_dkt, stride_dkh, stride_dkd,
                       stride_dvb, stride_dvt, stride_dvh, stride_dve,
                       T, H, d: tl.constexpr, e: tl.constexpr, D: tl.constexpr,
@@ -22,9 +23,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
             dS += off_b.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh
+            dN += off_b.to(tl.int64) * stride_dnb + off_h.to(tl.int64) * stride_dnh
             dK += off_b.to(tl.int64) * stride_dkb + off_h.to(tl.int64) * stride_dkh
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
-            
+            # dPhiK += off_b.to(tl.int64) * stride_dpb + off_h.to(tl.int64) * stride_dph
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
@@ -47,6 +49,8 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
                     p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_0 = dN + (range_d1 + off_D + 0 * block1) * stride_dnD
+                    # p_dP_0 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 0 * block1) * stride_dpd
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
                     ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
@@ -56,7 +60,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
                     
-                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
+                    dN_0 = tl.load(p_dN_0) * multiplier # block1
+                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) + dN_0[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_0, dphik_0)
                     if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
@@ -92,9 +98,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
             dS += off_b.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh
+            dN += off_b.to(tl.int64) * stride_dnb + off_h.to(tl.int64) * stride_dnh
             dK += off_b.to(tl.int64) * stride_dkb + off_h.to(tl.int64) * stride_dkh
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
-            
+            # dPhiK += off_b.to(tl.int64) * stride_dpb + off_h.to(tl.int64) * stride_dph
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
@@ -119,6 +126,8 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
                     p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_0 = dN + (range_d1 + off_D + 0 * block1) * stride_dnD
+                    # p_dP_0 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 0 * block1) * stride_dpd
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
                     ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
@@ -128,7 +137,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
                     
-                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
+                    dN_0 = tl.load(p_dN_0) * multiplier # block1
+                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) + dN_0[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_0, dphik_0)
                     if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     elif m == 1:
@@ -178,9 +189,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
             dS += off_b.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh
+            dN += off_b.to(tl.int64) * stride_dnb + off_h.to(tl.int64) * stride_dnh
             dK += off_b.to(tl.int64) * stride_dkb + off_h.to(tl.int64) * stride_dkh
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
-            
+            # dPhiK += off_b.to(tl.int64) * stride_dpb + off_h.to(tl.int64) * stride_dph
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
@@ -209,6 +221,8 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
                     p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_0 = dN + (range_d1 + off_D + 0 * block1) * stride_dnD
+                    # p_dP_0 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 0 * block1) * stride_dpd
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
                     ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     phik_0 = k_d1 * (k_d2_0[:, None]) # BLOCK_T x block1
@@ -218,7 +232,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
                     
-                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
+                    dN_0 = tl.load(p_dN_0) * multiplier # block1
+                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) + dN_0[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_0, dphik_0)
                     if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     elif m == 1:
@@ -297,9 +313,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
             dS += off_b.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh
+            dN += off_b.to(tl.int64) * stride_dnb + off_h.to(tl.int64) * stride_dnh
             dK += off_b.to(tl.int64) * stride_dkb + off_h.to(tl.int64) * stride_dkh
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
-            
+            # dPhiK += off_b.to(tl.int64) * stride_dpb + off_h.to(tl.int64) * stride_dph
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
@@ -322,8 +339,12 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
                     p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_0 = dN + (range_d1 + off_D + 0 * block1) * stride_dnD
+                    # p_dP_0 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 0 * block1) * stride_dpd
                     p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd # BLOCK_T
                     p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_1 = dN + (range_d1 + off_D + 1 * block1) * stride_dnD
+                    # p_dP_1 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 1 * block1) * stride_dpd
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
                     ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     k_d2_1 = tl.load(p_k_d2_1, mask=mask_T, other=0.) # BLOCK_T
@@ -337,13 +358,17 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
                     
-                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
+                    dN_0 = tl.load(p_dN_0) * multiplier # block1
+                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) + dN_0[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_0, dphik_0)
                     if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     else:
                         dk_1 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     
-                    dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
+                    dN_1 = tl.load(p_dN_1) * multiplier # block1
+                    dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) + dN_1[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_1, dphik_1)
                     if m == 0:
                         dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                     else:
@@ -386,9 +411,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
             dS += off_b.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh
+            dN += off_b.to(tl.int64) * stride_dnb + off_h.to(tl.int64) * stride_dnh
             dK += off_b.to(tl.int64) * stride_dkb + off_h.to(tl.int64) * stride_dkh
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
-            
+            # dPhiK += off_b.to(tl.int64) * stride_dpb + off_h.to(tl.int64) * stride_dph
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
@@ -413,8 +439,12 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
                     p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_0 = dN + (range_d1 + off_D + 0 * block1) * stride_dnD
+                    # p_dP_0 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 0 * block1) * stride_dpd
                     p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd # BLOCK_T
                     p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_1 = dN + (range_d1 + off_D + 1 * block1) * stride_dnD
+                    # p_dP_1 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 1 * block1) * stride_dpd
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
                     ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     k_d2_1 = tl.load(p_k_d2_1, mask=mask_T, other=0.) # BLOCK_T
@@ -428,7 +458,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
                     
-                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
+                    dN_0 = tl.load(p_dN_0) * multiplier # block1
+                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) + dN_0[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_0, dphik_0)
                     if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     elif m == 1:
@@ -438,7 +470,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     else:
                         dk_3 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     
-                    dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
+                    dN_1 = tl.load(p_dN_1) * multiplier # block1
+                    dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) + dN_1[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_1, dphik_1)
                     if m == 0:
                         dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                     elif m == 1:
@@ -501,9 +535,10 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
             K += off_b.to(tl.int64) * stride_kb + off_h.to(tl.int64) * stride_kh
             V += off_b.to(tl.int64) * stride_vb + off_h.to(tl.int64) * stride_vh
             dS += off_b.to(tl.int64) * stride_dsb + off_h.to(tl.int64) * stride_dsh
+            dN += off_b.to(tl.int64) * stride_dnb + off_h.to(tl.int64) * stride_dnh
             dK += off_b.to(tl.int64) * stride_dkb + off_h.to(tl.int64) * stride_dkh
             dV += off_b.to(tl.int64) * stride_dvb + off_h.to(tl.int64) * stride_dvh
-            
+            # dPhiK += off_b.to(tl.int64) * stride_dpb + off_h.to(tl.int64) * stride_dph
             range_t = tl.arange(0, BLOCK_T).to(tl.int64) + off_t * BLOCK_T
             range_e = tl.arange(0, e).to(tl.int64)
             range_d1 = tl.arange(0, block1)
@@ -532,8 +567,12 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
                     p_k_d2_0 = K + range_t[:] * stride_kt + (off_d2 + 0) * stride_kd # BLOCK_T
                     p_ds_0 = dS + (range_d1[:, None] + off_D + 0 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_0 = dN + (range_d1 + off_D + 0 * block1) * stride_dnD
+                    # p_dP_0 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 0 * block1) * stride_dpd
                     p_k_d2_1 = K + range_t[:] * stride_kt + (off_d2 + 1) * stride_kd # BLOCK_T
                     p_ds_1 = dS + (range_d1[:, None] + off_D + 1 * block1) * stride_dsD + range_e[None, :] * stride_dse # block1 x e
+                    p_dN_1 = dN + (range_d1 + off_D + 1 * block1) * stride_dnD
+                    # p_dP_1 = dPhiK + range_t[:, None] * stride_dpt + (range_d1[None, :] + off_D + 1 * block1) * stride_dpd
                     k_d2_0 = tl.load(p_k_d2_0, mask=mask_T, other=0.) # BLOCK_T
                     ds_0 = (tl.load(p_ds_0) * multiplier).to(K.dtype.element_ty) # block1 x e
                     k_d2_1 = tl.load(p_k_d2_1, mask=mask_T, other=0.) # BLOCK_T
@@ -547,7 +586,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                         v = tl.load(p_v, mask=mask_T[:, None], other=0.)
             
                     
-                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) # BLOCK_T x block1
+                    dN_0 = tl.load(p_dN_0) * multiplier # block1
+                    dphik_0 = tl.dot(v, tl.trans(ds_0)).to(tl.float32) + dN_0[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_0, dphik_0)
                     if m == 0:
                         dk_0 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     elif m == 1:
@@ -565,7 +606,9 @@ def _update_state_bwd(K, V, dS, dK, dV, deg: tl.constexpr,
                     else:
                         dk_7 += dphik_0 * k_d2_0[:, None] # BLOCK_T x block1
                     
-                    dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) # BLOCK_T x block1
+                    dN_1 = tl.load(p_dN_1) * multiplier # block1
+                    dphik_1 = tl.dot(v, tl.trans(ds_1)).to(tl.float32) + dN_1[None, :] # BLOCK_T x block1
+                    # tl.store(p_dP_1, dphik_1)
                     if m == 0:
                         dk_0 += dphik_1 * k_d2_1[:, None] # BLOCK_T x block1
                     elif m == 1:

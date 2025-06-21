@@ -479,12 +479,20 @@ mha_fwd(at::Tensor &q,                       // batch_size x seqlen_q x num_head
         if (log_g_q.stride(1) != 1)
         {
             // TORCH_WARN("log_g_q tensor is not contiguous along sequence dimension. Consider providing a contiguous tensor for better performance.");
-            log_g_q = log_g_q.transpose(1, 2).contiguous().transpose(1, 2); // [b, t, h] with t contiguous
+            if (log_g_q.size(1) != 1) {
+               log_g_q = log_g_q.transpose(1, 2).contiguous().transpose(1, 2); // [b, t, h] with t contiguous
+            } else {
+                log_g_q = log_g_q.select(1, 0).unsqueeze(-1).transpose(1, 2);
+            }
         }
         if (log_g_k.stride(1) != 1)
         {
             // TORCH_WARN("log_g_k tensor is not contiguous along sequence dimension. Consider providing a contiguous tensor for better performance.");
-            log_g_k = log_g_k.transpose(1, 2).contiguous().transpose(1, 2); // [b, t, h] with t contiguous
+            if (log_g_k.size(1) != 1) {
+               log_g_k = log_g_k.transpose(1, 2).contiguous().transpose(1, 2); // [b, t, h] with t contiguous
+            } else {
+                log_g_k = log_g_k.select(1, 0).unsqueeze(-1).transpose(1, 2);
+            }
         }
 
         TORCH_CHECK(log_g_q.stride(1) == 1, "Log G Q tensor must have contiguous sequence dimension");
@@ -687,7 +695,11 @@ mha_bwd(const at::Tensor &q,                 // batch_size x seqlen_q x num_head
     if (dy.stride(1) != 1) {
         // TODO: make all dy things a different shape
         // TORCH_WARN("dy tensor is not contiguous along sequence dimension, instead using ", dy.stride(1), " stride. Consider providing a contiguous tensor for better performance.");
-        dy_tensor = dy.transpose(1, 2).contiguous().transpose(1, 2);
+        if (dy.size(1) != 1) {
+            dy_tensor = dy.transpose(1, 2).contiguous().transpose(1, 2);
+        } else {
+            dy_tensor = dy.select(1, 0).unsqueeze(-1).transpose(1, 2);
+        }
     }
     CHECK_SHAPE(dy_tensor, batch_size, seqlen_q, num_heads);
     TORCH_CHECK(dy_tensor.stride(1) == 1, "dy tensor must have contiguous second dimension");
@@ -712,7 +724,11 @@ mha_bwd(const at::Tensor &q,                 // batch_size x seqlen_q x num_head
     auto rowmax_tensor = rowmax;
     if (rowmax.stride(1) != 1) {
         // TORCH_WARN("rowmax tensor is not contiguous along sequence dimension. Consider providing a contiguous tensor for better performance.");
-        rowmax_tensor = rowmax.transpose(1, 2).contiguous().transpose(1, 2); // [b, t, h] with t contiguous
+        if (rowmax.size(1) != 1) {
+            rowmax_tensor = rowmax.transpose(1, 2).contiguous().transpose(1, 2); // [b, t, h] with t contiguous
+        } else {
+            rowmax_tensor = rowmax.select(1, 0).unsqueeze(-1).transpose(1, 2);
+        }
     }
     TORCH_CHECK(rowmax_tensor.stride(1) == 1, "rowmax tensor must have contiguous sequence dimension");
     CHECK_SHAPE(rowmax_tensor, batch_size, seqlen_q, num_heads);
@@ -783,11 +799,19 @@ mha_bwd(const at::Tensor &q,                 // batch_size x seqlen_q x num_head
 
         if (log_g_q.stride(1) != 1) {
             // TORCH_WARN("log_g_q tensor is not contiguous along sequence dimension. Consider providing a contiguous tensor for better performance.");
-            log_g_q = log_g_q.transpose(1, 2).contiguous().transpose(1, 2);
+            if (log_g_q.size(1) != 1) {
+                log_g_q = log_g_q.transpose(1, 2).contiguous().transpose(1, 2);
+            } else {
+                log_g_q = log_g_q.select(1, 0).unsqueeze(-1).transpose(1, 2);
+            }
         }
         if (log_g_k.stride(1) != 1) {
             // TORCH_WARN("log_g_k tensor is not contiguous along sequence dimension. Consider providing a contiguous tensor for better performance.");
-            log_g_k = log_g_k.transpose(1, 2).contiguous().transpose(1, 2);
+            if (log_g_k.size(1) != 1) {
+                log_g_k = log_g_k.transpose(1, 2).contiguous().transpose(1, 2);
+            } else {
+                log_g_k = log_g_k.select(1, 0).unsqueeze(-1).transpose(1, 2);
+            }
         }
 
         CHECK_SHAPE(log_g_q, batch_size, seqlen_q, num_heads);

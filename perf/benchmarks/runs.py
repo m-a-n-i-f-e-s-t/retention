@@ -1,16 +1,17 @@
 from functools import wraps
 import inspect
 import torch
-
-from fla.ops.linear_attn import chunk_linear_attn, fused_chunk_linear_attn
-from power_attention_cuda import mosaic_sympow
-from power_attention.power_full import power_full, power_full_triton, create_inputs as create_inputs_power
+from flash_attn import flash_attn_func
+from power_attention.power_full import power_full, power_full_vidrial
+from power_attention.create_inputs import create_inputs as create_inputs_power
 from power_attention._expansion import expand as triton_expand, create_inputs as create_inputs_expansion
-from power_attention._attention import attention_triton, attention, create_inputs as create_inputs_attention
-from power_attention._update_state import update_state_triton, update_state, create_inputs as create_inputs_update_state
-from power_attention._query_state import query_state_triton, query_state, create_inputs as create_inputs_query_state
-from perf.baselines.fla import create_inputs as create_inputs_fla
-from perf.baselines.sdpa import create_inputs as create_inputs_sdpa
+from power_attention._attention import attention_triton, attention_cuda, create_inputs_cuda as create_inputs_attention_cuda, create_inputs as create_inputs_attention
+from power_attention._update_state import update_state_triton, update_state_vidrial, create_inputs as create_inputs_update_state
+from power_attention._query_state import query_state_triton, query_state_vidrial, create_inputs as create_inputs_query_state
+from power_attention._discumsum import discumsum, create_inputs as create_inputs_discumsum
+from .flash import create_inputs as create_inputs_flash
+from .sdpa import create_inputs as create_inputs_sdpa
+
 
 
 def sanitize_kwargs(fn):
@@ -29,29 +30,10 @@ class SDPA():
     @staticmethod
     def make_run(**kw):
         inputs = sanitize_kwargs(create_inputs_sdpa)(**kw)
-
         return lambda: torch.nn.functional.scaled_dot_product_attention(**inputs)
 
 
-class FLA():
-    @staticmethod
-    def make_run(**kw):
-        kw['output_final_state'] = True # This has to be True for FLA backward pass to be compiable with torch.autograd.backward
-        inputs = sanitize_kwargs(create_inputs_fla)(**kw)
-
-        if kw.get('fused', False):
-            fn = fused_chunk_linear_attn
-        else:
-            fn = chunk_linear_attn
-
-        def only_return_o():
-            o, final_state = fn(**inputs)
-            return o
-
-        return only_return_o
-
-
-class Power():
+class PowerFullTriton():
     @staticmethod
     def make_run(**kw):
         # 128 is not supported by power_full yet
@@ -63,51 +45,27 @@ class Power():
         inputs = sanitize_kwargs(create_inputs_power)(**kw)
 
         return lambda: power_full(**inputs)
+        
     
-
-class PowerTriton():
+class PowerFullVidrial():
     @staticmethod
     def make_run(**kw):
         inputs = sanitize_kwargs(create_inputs_power)(**kw)
-
-        return lambda: power_full_triton(**inputs)
-
-
-class TritonExpansion():
-    @staticmethod
-    def make_run(**kw):
-        inputs = sanitize_kwargs(create_inputs_expansion)(**kw)
-        return lambda: triton_expand(**inputs)
-
-
-class MosaicExpansion():
-    @staticmethod
-    def make_run(**kw):
-        inputs = sanitize_kwargs(create_inputs_expansion)(**kw)
-
-        return lambda: mosaic_sympow(inputs['K'], 2, 8)[0]
+        return lambda: power_full_vidrial(**inputs)
     
 
-class QueryState():
+class Discumsum():
     @staticmethod
     def make_run(**kw):
-        inputs = sanitize_kwargs(create_inputs_query_state)(**kw)
-        return lambda: query_state(**inputs)
-    
+        inputs = sanitize_kwargs(create_inputs_discumsum)(**kw)
+        return lambda: discumsum(**inputs)
 
 class QueryStateTriton():
     @staticmethod
     def make_run(**kw):
         inputs = sanitize_kwargs(create_inputs_query_state)(**kw)
         return lambda: query_state_triton(**inputs)
-    
 
-class UpdateState():
-    @staticmethod
-    def make_run(**kw):
-        inputs = sanitize_kwargs(create_inputs_update_state)(**kw)
-        return lambda: update_state(**inputs)
-    
 
 class UpdateStateTriton():
     @staticmethod
@@ -116,21 +74,55 @@ class UpdateStateTriton():
         return lambda: update_state_triton(**inputs)
     
 
-class PowerAttention():
+class PowerAttentionCuda():
     @staticmethod
     def make_run(**kw):
-        inputs = sanitize_kwargs(create_inputs_attention)(**kw)
-        return lambda: attention(**inputs)
-    
+        inputs = sanitize_kwargs(create_inputs_attention_cuda)(**kw)
+        def _run():
+            o, _ = attention_cuda(**inputs)
+            return o
+        return _run
 
 class PowerAttentionTriton():
     @staticmethod
     def make_run(**kw):
         inputs = sanitize_kwargs(create_inputs_attention)(**kw)
-        return lambda: attention_triton(**inputs)
+        def _run():
+            o = attention_triton(**inputs)
+            return o
+        return _run
 
-    
-    
-    
+
+class UpdateStateVidrial():
+    @staticmethod
+    def make_run(**kw):
+        inputs = sanitize_kwargs(create_inputs_update_state)(**kw, use_vidrial_layout=True)
+        return lambda: update_state_vidrial(**inputs)
 
 
+class UpdateStateTriton():
+    @staticmethod
+    def make_run(**kw):
+        inputs = sanitize_kwargs(create_inputs_update_state)(**kw)
+        return lambda: update_state_triton(**inputs)
+
+
+class QueryStateVidrial():
+    @staticmethod
+    def make_run(**kw):
+        inputs = sanitize_kwargs(create_inputs_query_state)(**kw, use_vidrial_layout=True)
+        return lambda: query_state_vidrial(**inputs)
+
+
+class QueryStateTriton():
+    @staticmethod
+    def make_run(**kw):
+        inputs = sanitize_kwargs(create_inputs_query_state)(**kw)
+        return lambda: query_state_triton(**inputs)
+    
+
+class FlashAttn():
+    @staticmethod
+    def make_run(**kw):
+        inputs = sanitize_kwargs(create_inputs_flash)(**kw)
+        return lambda: flash_attn_func(**inputs)

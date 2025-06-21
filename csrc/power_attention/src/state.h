@@ -1029,6 +1029,3 @@ void run_discumsum_fwd(Discumsum_params &params, cudaStream_t stream);
 
 template <typename T>
 void run_discumsum_bwd(Discumsum_bwd_params &params, cudaStream_t stream);
-
-template <typename Elem_type, int DIM, int DIM_BLOCK>
-at::Tensor run_mosaic(const at::Tensor &K);

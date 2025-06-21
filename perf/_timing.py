@@ -23,10 +23,16 @@ def get_compiled_version(fn, inputs, direction, warmup=3, compile=True):
     outputs = fn(**inputs)
     grads = tensors_to_ones_like(outputs)
     def bwd():
+        nonlocal grads, outputs
+        tuples = [(o, g) for o, g in zip(outputs, grads) if o.requires_grad]
+        outputs, grads = [t[0] for t in tuples], [t[1] for t in tuples]
         torch.autograd.backward(outputs, grad_tensors=grads, retain_graph=True)
     torch._dynamo.config.compiled_autograd = False
     def fwd_bwd():
+        nonlocal grads
         outputs = fn(**inputs)
+        tuples = [(o, g) for o, g in zip(outputs, grads) if o.requires_grad]
+        outputs, grads = [t[0] for t in tuples], [t[1] for t in tuples]
         torch.autograd.backward(outputs, grad_tensors=grads)
     # Compile functions
     if direction == 'fwd':
