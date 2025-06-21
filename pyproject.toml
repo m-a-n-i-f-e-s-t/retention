@@ -45,6 +45,7 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+# TODO (sean): add flash_attn and flash-linear-attention
 [project.optional-dependencies]
 dev = [
   "twine",
