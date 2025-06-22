@@ -10,7 +10,7 @@ To understand the performance of power-attention, we compare the execution time 
 
 ![single_problem_benchmark](../plots/single_problem.png)
 
-For example, the above shows that for a problem with batch 1, seqlen 65536, heads 8, head_dim 64, flash-attention and torch's scaled-dot-product-attention function both takes around 168ms to compute the output on A6000, whereas power-attention takes 39.8ms, resulting a **4.2x** throughput improvement.
+For example, the above shows that for a problem with batch 1, seqlen 65536, heads 8, head_dim 64, flash-attention and torch's scaled-dot-product-attention function both takes around 50ms to compute the output on H100, whereas power-attention takes 16.8ms, resulting a **3x** throughput improvement.
 
 To run benchmark on a different problem, refer to `benchmark.py` for different options one can specify.
 
