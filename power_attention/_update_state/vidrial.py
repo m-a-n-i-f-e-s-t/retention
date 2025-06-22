@@ -16,8 +16,7 @@ def update_state(K, V, deg, d_tile=None):
     D = sympow_dim(d, deg, d_tile=d_tile)
 
     S = sympow_mma(K, V, power=deg, expand_dim=-2, d_tile=d_tile)
-    # s = sympow_mma(K.to(torch.float32), torch.ones((B, c, 1), device=K.device, dtype=torch.float32), power=deg, expand_dim=-2, d_tile=d_tile)
-    s = torch.ones((b, n, h, D), device=K.device, dtype=torch.float32)
+    s = sympow_mma(K.to(torch.float32), torch.ones((B, c, 1), device=K.device, dtype=torch.float32), power=deg, expand_dim=-2, d_tile=d_tile)
 
     return S.view(b, n, h, D, d), s.view(b, n, h, D)
 

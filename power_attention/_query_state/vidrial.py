@@ -26,8 +26,7 @@ def query_state(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state,
     s = s.reshape(B, D)
 
     Y_qs = sympow_mma(Q, S, power=deg, d_tile=d_tile, expand_dim=-1)
-    # l_qs = sympow_mma(Q.to(torch.float32), s.unsqueeze(-1).to(torch.float32), power=deg, d_tile=d_tile, expand_dim=-1).squeeze(-1)
-    l_qs = torch.ones((b, n, h, c), device=Q.device, dtype=torch.float32)
+    l_qs = sympow_mma(Q.to(torch.float32), s.unsqueeze(-1).to(torch.float32), power=deg, d_tile=d_tile, expand_dim=-1).squeeze(-1)
 
     Y_qs = Y_qs.view(b, n, h, c, d).transpose(2, 3)# b n c h d
     l_qs = l_qs.view(b, n, h, c).transpose(2, 3) # b n c h
@@ -37,7 +36,7 @@ def query_state(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state,
     qs_factor = γ / alpha # [b, n, c, h]
 
     O = Y_attn * attn_factor.unsqueeze(-1) + Y_qs * scale_p * qs_factor.unsqueeze(-1) # [b, n, c, h, d]
-    # l = l_attn * attn_factor + l_qs * scale_p * qs_factor # [b, n, c, h]
-    # O = (O.to(torch.float32) / (l.unsqueeze(-1) + 1e-3)).to(Y_qs.dtype)
+    l = l_attn * attn_factor + l_qs * scale_p * qs_factor # [b, n, c, h]
+    O = (O.to(torch.float32) / (l.unsqueeze(-1) + 1e-3)).to(Y_qs.dtype)
     return O.contiguous()
 

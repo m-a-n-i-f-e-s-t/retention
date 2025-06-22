@@ -139,6 +139,8 @@ python -m perf.benchmark bwd          // Backward pass
 python -m perf.benchmark fwd+bwd      // Forward + backward pass
 ```
 
+See [benchmark](https://github.com/m-a-n-i-f-e-s-t/power-attention/tree/main/perf/README.md) for details.
+
 ### Documentation
 
 To view the documentation locally, run:
@@ -218,7 +220,7 @@ We welcome contributions! Here's how you can help:
 1. Update documentation for any new features
 2. Add or update tests as needed
 3. Ensure all tests pass: `python3 -m pytest perf/tests`
-4. Run benchmarks if performance-critical code was changed: `python3 -m perf.create_report && python3 -m perf.plot_reports`
+4. Run benchmarks if performance-critical code was changed: `python3 -m perf.benchmark`
 5. Create a Pull Request with a clear description of changes
 6. Wait for review and address any feedback
 

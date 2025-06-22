@@ -210,7 +210,7 @@ def plot_throughput_by_ctx(b: int, ts: list[int], n: int, h: int, d: int, dtype:
     df = df.set_index(['ctx'])
     if impl == 'default':
         df = df.drop(columns=['power_full_vidrial', 'power_attention_cuda', 'power_attention_triton'])
-    ax = df.plot(kind='line', figsize=(12, 7))
+    ax = df.plot(kind='line', figsize=(12, 7), linewidth=3, marker='o')
     plt.ylabel('Throughput (tokens/s)')
     gpu_name = get_cuda_device_basic_props()[0]['name'].replace(' ', '_')
     plt.title('Throughput vs Context Length Comparison')
