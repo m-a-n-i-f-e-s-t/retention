@@ -70,7 +70,7 @@ def run(kernel: str, b: int = 2, t: int = 4096, n: int = 8, h: int = 1, d: int =
         'requires_grad': 'bwd' in mode,
     }
     key = copy.deepcopy(fixed_kwargs) | {'mode': mode, 'compile': compile, 'kernel': kernel}
-    if key in benchmark_db and not os.environ.get('UPDATE_DB', '0') == '1':
+    if os.environ.get('UPDATE_DB', '1') == '0' and key in benchmark_db:
         logger.info(f"Using cached result for {key}")
         return benchmark_db.get(lambda k: k == key)[0][1]
     fixed_kwargs['dtype'] = str_to_dtype(fixed_kwargs['dtype'])
