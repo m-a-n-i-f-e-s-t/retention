@@ -222,7 +222,7 @@ For major changes, please open an issue first to discuss what you would like to 
 ## Release Process
 
 1. Update the version in `pyproject.toml`
-2. Run `python3 -m pytest tests/` and benchmarks if applicable
+2. Run `pytest` and benchmarks if applicable
 3. Run `make release-test` to build & push to Test PyPI for all Python targets
 4. Run `make release` to build & push to PyPI for all Python targets
 
