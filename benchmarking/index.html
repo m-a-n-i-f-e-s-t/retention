@@ -471,9 +471,18 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#benchmark-reports" class="md-nav__link">
+  <a href="#single-problem-benchmark" class="md-nav__link">
     <span class="md-ellipsis">
-      Benchmark Reports
+      Single Problem Benchmark
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#throughput-by-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      Throughput by Context
     </span>
   </a>
   
@@ -481,15 +490,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#visualizing-results" class="md-nav__link">
-    <span class="md-ellipsis">
-      Visualizing Results
-    </span>
-  </a>
   
 </li>
       
@@ -626,43 +626,24 @@
 
 <h2 id="quick-start">Quick Start</h2>
 <p>Install benchmarking dependencies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev<span class="o">]</span><span class="w">  </span><span class="c1"># Includes benchmarking tools</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>psutil
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">flash_attn</span><span class="o">==</span><span class="m">2</span>.7.3<span class="w"> </span>--no-build-isolation
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev<span class="o">]</span><span class="w">  </span><span class="c1"># Includes benchmarking tools</span>
 </code></pre></div>
 <h2 id="running-benchmarks">Running Benchmarks</h2>
-<p>The benchmarking system allows you to run various benchmarks and track performance over time. Results are saved as YAML files that can be later visualized.</p>
 <h3 id="basic-usage">Basic Usage</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Run all available benchmarks</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>-m<span class="w"> </span>perf.create_report
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Run specific benchmarks</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>-m<span class="w"> </span>perf.create_report<span class="w"> </span>-b<span class="w"> </span>speed<span class="w"> </span>-b<span class="w"> </span>precision
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Filter benchmark configurations</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>python<span class="w"> </span>-m<span class="w"> </span>perf.create_report<span class="w"> </span>-f<span class="w"> </span><span class="nv">t</span><span class="o">=</span><span class="m">512</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">chunk_size</span><span class="o">=</span><span class="m">128</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Specify custom output file</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>python<span class="w"> </span>-m<span class="w"> </span>perf.create_report<span class="w"> </span>-o<span class="w"> </span>my_results.yaml
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>perf.benchmark<span class="w"> </span>fwd+bwd
 </code></pre></div>
-<p>By default, when running without specifying an output file:
-- Results are saved in the <code>reports/</code> directory
-- Filenames follow the format <code>YYYYMMDDHHMM_&lt;commit-hash&gt;.yaml</code>
-- If a report for the current commit exists, results are added to it
-- Reports are only saved if the git working directory is clean</p>
-<h3 id="benchmark-reports">Benchmark Reports</h3>
-<p>Each benchmark report contains detailed measurements with their configurations. Example report entry:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">attrs</span><span class="p">:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">seq_len</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2048</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">num_heads</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">head_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">dtype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">torch.bfloat16</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123.45</span><span class="w">    </span><span class="c1"># The measured value (e.g., milliseconds, memory usage)</span>
-</code></pre></div>
-<h2 id="visualizing-results">Visualizing Results</h2>
-<p>The benchmarking suite includes a plotting tool to visualize results across time interactively:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>-m<span class="w"> </span>perf.plot_reports<span class="w"> </span>-o<span class="w"> </span>my_plots.html
-</code></pre></div>
+Running the above command will produce 2 plots: single-problem benchmark and context-scaling benchmark.</p>
+<h3 id="single-problem-benchmark">Single Problem Benchmark</h3>
+<p>To understand the performance of power-attention, we compare the execution time of power-attention on a particular problem size (defined by batch, seqlen, heads, head_dim, and chunk_size), versus that of flash-attention on the same problem.</p>
+<p><img alt="single_problem_benchmark" src="../images/single_problem.png" /></p>
+<p>For example, the above shows that for a problem with batch 1, seqlen 65536, heads 8, head_dim 64, flash-attention and torch's scaled-dot-product-attention function both takes around 50ms to compute the output on H100, whereas power-attention takes 16.8ms, resulting a <strong>3x</strong> throughput improvement.</p>
+<p>To run benchmark on a different problem, refer to <code>benchmark.py</code> for different options one can specify.</p>
+<h3 id="throughput-by-context">Throughput by Context</h3>
+<p>We can also vary the context size to get a better idea of the relative throughput of power-attention and flash-attention.</p>
+<p><img alt="throughput_by_ctx" src="../images/throughput_by_ctx.png" /></p>
+<p>This shows that as context size increases, the throughput of power-attention stays constant while flash-attention drops due to its quadratic cost.</p>
 
 
 

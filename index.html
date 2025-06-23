@@ -241,33 +241,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      Overview
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mathematical-foundation" class="md-nav__link">
-    <span class="md-ellipsis">
-      Mathematical Foundation
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#key-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      Key Features
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#getting-started" class="md-nav__link">
     <span class="md-ellipsis">
       Getting Started
@@ -602,39 +575,6 @@
 
 <h1 id="power-attention">Power Attention</h1>
 <p>A CUDA implementation of symmetric power attention, achieving transformer-level performance with linear-cost RNN computation.</p>
-<h2 id="overview">Overview</h2>
-<p>Power Attention implements symmetric power transformers as described in <a href="https://manifestai.com/articles/symmetric-power-transformers/">Buckman et al. (2024)</a>. The key insight is replacing the traditional softmax mechanism with symmetric power embeddings, which enables:</p>
-<ol>
-<li><strong>Linear Complexity</strong>: O(n) computation and memory through an RNN formulation</li>
-<li><strong>Tractable State Size</strong>: For a 124M parameter model with p=4, the state size is ~14GB</li>
-<li><strong>Theoretical Guarantees</strong>: Proven equivalence to power-based attention mechanisms</li>
-</ol>
-<h2 id="mathematical-foundation">Mathematical Foundation</h2>
-<p>The architecture replaces the softmax in traditional transformers with an even power:</p>
-<div class="arithmatex">\[
-Y_i = \sum_{j=1}^i A_{ij} V_j \qquad A_{ij} = \frac{ \phi(Q_i)^T \phi(K_j)}{\sum_{k=1}^i \phi(Q_i)^T \phi(K_k) }
-\]</div>
-<p>where <span class="arithmatex">\(\phi\)</span> is the symmetric power embedding function. This formulation enables an equivalent RNN computation:</p>
-<div class="arithmatex">\[
-Y_{i} = \frac{S_i \phi(Q_i)}{Z_i \phi(Q_i)} \qquad Z_i = Z_{i-1} + \phi(K_i)^T \qquad S_i = S_{i-1} + V_i \phi(K_i)^T
-\]</div>
-<p>In practice, the normalization above can be replaced by a layernorm layer without sacrificing any performance, so this package implements the following mathematical operation:</p>
-<div class="arithmatex">\[
-Y_i = \text{Norm}(\sum_{j=1}^{i}\phi(Q_i)^T \phi(K_j)V_j) 
-\]</div>
-<p>with the corresponding recurrent computation:</p>
-<div class="arithmatex">\[
-Y_i = \text{Norm}(S_i \phi(Q_i)) \qquad S_i = S_{i-1} + V_i \phi(K_i)^T
-\]</div>
-<p>where <span class="arithmatex">\(\text{Norm}\)</span> denotes a layernorm layer (Ba, Kiros, and Hinton 2016).</p>
-<p>For a detailed derivation of the symmetric power embedding <span class="arithmatex">\(\phi\)</span> and its properties, please refer to the <a href="https://manifestai.com/articles/symmetric-power-transformers/#4-1-mathematical-background">mathematical background</a> section in the paper.</p>
-<h2 id="key-features">Key Features</h2>
-<ul>
-<li><strong>Linear-Cost Attention</strong>: <span class="arithmatex">\(O(n)\)</span> computation and memory complexity through RNN formulation</li>
-<li><strong>Symmetric Power Embedding</strong>: Novel embedding function based on symmetric tensors</li>
-<li><strong>Configurable State Size</strong>: Control state size vs accuracy tradeoff with power parameter p (2-4)</li>
-<li><strong>Rotary Compatibility</strong>: Full compatibility with rotary embeddings, unlike other linear transformer variants</li>
-</ul>
 <h2 id="getting-started">Getting Started</h2>
 <ul>
 <li><a href="installation/">Installation</a>: Build configuration and requirements</li>
