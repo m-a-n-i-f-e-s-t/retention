@@ -12,54 +12,33 @@ This guide explains how to run benchmarks for symmetric power attention and visu
 Install benchmarking dependencies:
 
 ```bash
+pip install psutil
+pip install flash_attn==2.7.3 --no-build-isolation
 pip install -e .[dev]  # Includes benchmarking tools
 ```
 
 ## Running Benchmarks
 
-The benchmarking system allows you to run various benchmarks and track performance over time. Results are saved as YAML files that can be later visualized.
-
 ### Basic Usage
-
 ```bash
-# Run all available benchmarks
-python -m perf.create_report
-
-# Run specific benchmarks
-python -m perf.create_report -b speed -b precision
-
-# Filter benchmark configurations
-python -m perf.create_report -f t=512 -f chunk_size=128
-
-# Specify custom output file
-python -m perf.create_report -o my_results.yaml
+python -m perf.benchmark fwd+bwd
 ```
+Running the above command will produce 2 plots: single-problem benchmark and context-scaling benchmark.
 
-By default, when running without specifying an output file:
-- Results are saved in the `reports/` directory
-- Filenames follow the format `YYYYMMDDHHMM_<commit-hash>.yaml`
-- If a report for the current commit exists, results are added to it
-- Reports are only saved if the git working directory is clean
+### Single Problem Benchmark
+To understand the performance of power-attention, we compare the execution time of power-attention on a particular problem size (defined by batch, seqlen, heads, head_dim, and chunk_size), versus that of flash-attention on the same problem.
 
-### Benchmark Reports
+![single_problem_benchmark](../images/single_problem.png)
 
-Each benchmark report contains detailed measurements with their configurations. Example report entry:
+For example, the above shows that for a problem with batch 1, seqlen 65536, heads 8, head_dim 64, flash-attention and torch's scaled-dot-product-attention function both takes around 50ms to compute the output on H100, whereas power-attention takes 16.8ms, resulting a **3x** throughput improvement.
 
-```yaml
-- attrs:
-    batch_size: 32
-    seq_len: 2048
-    num_heads: 12
-    head_dim: 64
-    dtype: torch.bfloat16
-    device: cuda
-  value: 123.45    # The measured value (e.g., milliseconds, memory usage)
-```
+To run benchmark on a different problem, refer to `benchmark.py` for different options one can specify.
 
-## Visualizing Results
 
-The benchmarking suite includes a plotting tool to visualize results across time interactively:
+### Throughput by Context
 
-```bash
-python -m perf.plot_reports -o my_plots.html
-```
+We can also vary the context size to get a better idea of the relative throughput of power-attention and flash-attention.
+
+![throughput_by_ctx](../images/throughput_by_ctx.png)
+
+This shows that as context size increases, the throughput of power-attention stays constant while flash-attention drops due to its quadratic cost.
