@@ -1,21 +1,20 @@
 # Power Attention
 [![Build](https://github.com/m-a-n-i-f-e-s-t/power-attention/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/m-a-n-i-f-e-s-t/power-attention/actions/workflows/build-and-test.yml)
 
-A PyTorch extension implementing symmetric power transformers - a variant of linear transformers that achieves transformer-level performance while scaling linearly with sequence length. This package provides efficient CUDA kernels that make it possible to process much longer sequences compared to standard quadratic attention.
+This repository contains a PyTorch layer implementing symmetric power attention, a linear-cost variant of attention that whose state size can be controlled
+independently of context length and parameter count.
 
-For details on the approach, see our paper: [Symmetric Power Transformers](https://manifestai.com/articles/symmetric-power-transformers/)
+For details on the approach, see our paper: [Scaling Context Requires Rethinking Attention](https://manifestai.com/coming-soon)
 
-## Performance
+Documentation: [https://m-a-n-i-f-e-s-t.github.io/power-attention/](https://m-a-n-i-f-e-s-t.github.io/power-attention/)
 
-The speed-per-token of the recurrent form of power attention is controlled by the size of the state, which grows with the power: squaring, cubing, etc., increase the state size. (In contrast, the speed-per-token of standard attention is controlled by context length.) Larger states learn better, but also slow down training. This results in a typical scaling effect, where the optimal state size increases with compute budget. These models dominate transformers at long context lengths when the state size is selected appropriately.
+### Features
 
-![alt text](plots/xl_performance_plot.png)
+- Efficient chunked algorithm for linear scaling with sequence length (O(t) cost vs O(t²) for standard attention)
+- Support for gated attention and rotary embeddings
+- CUDA kernels optimized for A100
+- FP16 and BF16 support
 
-The above result is an 1.3-billion parameter model trained on 32k context length on [Longcrawl64](https://manifestai.com/articles/longcrawl64/). The x-axis measures the estimated time on the basis of FLOP utilization for an optimal implementation. We are not yet at that level of wall-clock performance, but we are getting closer.
-
-![alt text](plots/kernel_speed_plot.png)
-
-The above timings were measured on an A6000 GPU. The theoretically-achievable performance assumes that speed is FLOP-limited and that we can achieve a GPU utilization matching that of SDPA.
 
 ## Installation
 
@@ -99,14 +98,6 @@ class CausalSelfAttention(nn.Module):
         return y
 ```
 
-## Features
-
-- Efficient chunked algorithm for linear scaling with sequence length (O(t) cost vs O(t²) for standard attention)
-- Support for gated attention and rotary embeddings
-- CUDA kernels optimized for A100
-- FP16 and BF16 support
-- Replacement for standard attention in transformer models is possible for fine-tuning
-
 ## Development
 
 ### Setup
@@ -150,6 +141,11 @@ pip install mkdocs mkdocs-material
 .venv/bin/mkdocs serve -a 0.0.0.0:8000
 ```
 
+To update it publicly, run:
+```bash
+mkdocs gh-deploy
+```
+
 ### Training Example
 
 To immediately see the kernel in action, `cd train` and use:
@@ -173,18 +169,6 @@ torchrun --standalone --nproc_per_node=4 train.py \
   --disable_gating=False \
   --out_dir=out/my_model
 ```
-
-Key training parameters:
-- `attention_kernel`: Use 'power' for symmetric power attention (default is 'sdpa' for standard attention)
-- `dataset`: Name of the dataset to use for training
-- `degree`: Power attention degree (default: 1)
-- `chunk_size`: Size of chunks for processing long sequences (default: None)
-- `disable_gating`: Set to true to disable gating mechanism (default: False)
-- `batch_size`: Batch size per GPU (default: 12)
-- `block_size`: Sequence length (default: 1024)
-- `out_dir`: Output directory for checkpoints and logs (default: 'out')
-- `compile`: Whether to use PyTorch 2.0 compilation for speed (default: True)
-- `dtype`: Data type for training - 'float32', 'bfloat16', or 'float16' (default: 'bfloat16' if supported, else 'float16')
 
 For distributed training across multiple nodes:
 ```bash
@@ -212,6 +196,7 @@ We welcome contributions! Here's how you can help:
 - **Code Style**: Follow PEP 8 for Python code. For CUDA code, follow the existing style in the codebase
 - **Documentation**: Add docstrings to new functions and update README if needed
 - **Testing**: Add tests for new features and ensure all tests pass
+- **Benchmarking**: If your code changes affect performance, delete the `plots/benchmark_results` and rerun some benchmarks with `python -m perf.benchmark fwd+bwd`
 - **Commits**: Write clear, concise commit messages
 - **Performance**: For CUDA kernels, include benchmarks showing performance impact
 
@@ -219,8 +204,8 @@ We welcome contributions! Here's how you can help:
 
 1. Update documentation for any new features
 2. Add or update tests as needed
-3. Ensure all tests pass: `python3 -m pytest perf/tests`
-4. Run benchmarks if performance-critical code was changed: `python3 -m perf.benchmark`
+3. Ensure all tests pass: `pytest`
+4. Run benchmarks if performance-critical code was changed: `python3 -m perf.benchmark fwd+bwd`
 5. Create a Pull Request with a clear description of changes
 6. Wait for review and address any feedback
 

@@ -22,7 +22,7 @@ from vidrial.mosaic.utils.gpu import get_cuda_device_basic_props
 
 benchmark_db = KVDB(os.path.expanduser('~/.power-attention-benchmark.db'))
 logger = logging.getLogger(__name__)
-plots_dir = Path(__file__).parent.parent / 'plots'
+plots_dir = Path(__file__).parent.parent / 'plots/benchmark_results'
 
 # Increase PyTorch compilation cache size to avoid recompilation
 torch._dynamo.config.cache_size_limit = 512
@@ -172,9 +172,10 @@ def plot_problem(b: int, t: int, n: int, h: int, d: int, dtype: str, device: str
     
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.20)  # Make room for the text below
-    plt.savefig(plots_dir / f'benchmark_results_{problem_str}_{gpu_name}.png', dpi=300, bbox_inches='tight')
+    fname = f'implementation_comparison/{problem_str}_{gpu_name}.png'
+    plt.savefig(plots_dir / fname, dpi=300, bbox_inches='tight')
     plt.close()
-    logger.info(f"Saved figure to {plots_dir / f'benchmark_results_{problem_str}_{gpu_name}.png'}")
+    logger.info(f"Saved figure to {plots_dir / fname}")
 
 
 def plot_throughput_by_ctx(b: int, ts: list[int], n: int, h: int, d: int, dtype: str, device: str, deg: int, chunk_size: int, gating: bool, mode: str, compile: bool, impl: str):
@@ -225,7 +226,7 @@ def plot_throughput_by_ctx(b: int, ts: list[int], n: int, h: int, d: int, dtype:
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.15)  # Make room for the text below
-    fig_name = f'throughput_by_ctx_b_{b}_n_{n}_h_{h}_d_{d}_dtype_{dtype}_device_{device}_deg_{deg}_chunk_size_{chunk_size}_gating_{gating}_mode_{mode}_compile_{compile}'
+    fig_name = f'throughput_by_ctx/b_{b}_n_{n}_h_{h}_d_{d}_dtype_{dtype}_device_{device}_deg_{deg}_chunk_size_{chunk_size}_gating_{gating}_mode_{mode}_compile_{compile}'
     plt.savefig(plots_dir / f'{fig_name}_{gpu_name}.png', dpi=300, bbox_inches='tight')
     plt.close()
     logger.info(f"Saved figure to {plots_dir / f'{fig_name}_{gpu_name}.png'}")
