@@ -38,7 +38,7 @@ disable_eval = False
 eval_interval = 100
 eval_slowdown_factor = 1.2
 log_interval = 10
-eval_iters = 200
+eval_iters = 8
 eval_only = False # if True, script exits right after the first eval
 always_save_checkpoint = False # if True, always save a checkpoint after each eval
 init_from = 'scratch' # 'scratch' or 'resume'
@@ -48,8 +48,8 @@ disable_logging = False
 wandb_project = None
 # data
 data_root = os.path.expanduser('~/mai_datasets')
-dataset = 'shakespeare'
-gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
+dataset = 'owt'
+gradient_accumulation_steps = 1 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
 # model
@@ -113,9 +113,6 @@ else:
 tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
-out_dir = f'out/{run_name}'
-if master_process and not disable_logging:
-    os.makedirs(out_dir, exist_ok=True)
 torch.manual_seed(1337 + seed_offset)
 torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
 torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
@@ -123,6 +120,20 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 # note: float16 data type will automatically use a GradScaler
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
+
+# logging
+if master_process and not disable_logging:
+    import logger
+    run_name = logger.init(
+        name=run_name,
+        info={'config': config},
+        wandb_project=wandb_project,
+        server_url=None,
+    )
+    print(f"\033[37mLogging as \033[34m{run_name}\033[37m.\033[0m")
+out_dir = f'out/{run_name}'
+if master_process and not disable_logging:
+    os.makedirs(out_dir, exist_ok=True)
 
 # poor man's data loader
 data_dir = os.path.join(data_root, dataset)
@@ -132,7 +143,7 @@ def get_batch(split):
     if split == 'train':
         data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
     else:
-        data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
+        data = np.memmap(os.path.join(data_dir, 'heldout.bin'), dtype=np.uint16, mode='r')
     ix = torch.randint(len(data) - (block_size+1), (batch_size,))
     src = np.stack([data[i:i+block_size+1] for i in ix]).astype(np.int64)
     x = torch.from_numpy(src[:, :-1])
@@ -235,17 +246,6 @@ def get_lr(it):
     assert 0 <= decay_ratio <= 1
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
-
-# logging
-if master_process and not disable_logging:
-    import logger
-    run_name = logger.init(
-        name=run_name,
-        info={'config': config},
-        wandb_project=wandb_project,
-        server_url=None,
-    )
-    print(f"\033[37mLogging as \033[34m{run_name}\033[37m.\033[0m")
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch

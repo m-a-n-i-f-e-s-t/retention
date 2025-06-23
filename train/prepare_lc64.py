@@ -48,7 +48,7 @@ def main(build_from_raw, destination_folder, source_folder, num_shards, train_to
 
         # Create memory-mapped files
         train_file = os.path.join(destination_folder, 'train.bin')
-        val_file = os.path.join(destination_folder, 'val.bin')
+        val_file = os.path.join(destination_folder, 'heldout.bin')
         dtype = np.uint16
 
         train_arr = np.memmap(train_file, dtype=dtype, mode='w+', shape=(train_tokens,))

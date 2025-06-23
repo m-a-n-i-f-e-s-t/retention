@@ -1,4 +1,5 @@
 build/*
+site/*
 
 # Python
 __pycache__/

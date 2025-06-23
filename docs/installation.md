@@ -2,27 +2,23 @@
 
 Power Attention can be installed either via pre-built wheels or built from source.
 
-## Installing Pre-built Wheels
-
-### Prerequisites
-- Python 3.11 or 3.12 (3.13 compatibility coming soon)
-- PyTorch >=2.5
-- NVIDIA GPU with compute capability 8.0+ (Ampere or newer)
-- CUDA driver supporting your PyTorch installation
+## From PyPI (Recommended)
 
 ```bash
 pip install power-attention
 ```
 
-## Building from Source
+## From Source
 
-### Extra Prerequisites
-- CUDA Toolkit 12.0+
-- C++ compiler compatible with CUDA
+### Prerequisites
+- Python 3.11 or 3.12 (3.13 depends on the upcoming [Triton 3.2 release](https://github.com/triton-lang/triton/issues/5215))
+- CUDA Toolkit 12.4
+- GCC/G++ with C++17 support
+- Linux (Windows/MacOS not supported)
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/manifestai/power-attention.git
+git clone https://github.com/manifest-ai/power-attention.git
 cd power-attention
 ```
 
@@ -30,6 +26,8 @@ cd power-attention
 ```bash
 pip install -e .[dev]
 ```
+
+All other dependencies (PyTorch, Ninja build system, etc.) will be automatically installed through pip.
 
 ## Build Configuration
 
@@ -55,6 +53,20 @@ export FAST_GATING=true    # Enable gating mechanism [true/false]
 pip install -e .[dev]
 ```
 
+## Development Setup
+
+The package uses pip's editable install mode for development. First, activate your Python virtual environment, then:
+
+```bash
+# Install base package in editable mode
+pip install -e .
+
+# Install development dependencies
+pip install psutil
+pip install flash_attn==2.7.3 --no-build-isolation
+pip install -e .[dev]
+```
+
 ## Verifying Installation
 
 ```python
@@ -76,6 +88,42 @@ torch.autograd.backward((output,), grad_tensors=(output,))
 
 print("Ran power attention forwards & backwards, output shape:", output.shape)
 ```
+
+## Training Example
+
+To immediately see the kernel in action, `cd train` and use:
+
+```bash
+# Create the dataset first
+python prepare_owt.py
+
+# Single GPU training
+python train.py \
+  --batch_size=32 \
+  --attention_kernel=power \
+  --degree=2 \
+  --chunk_size=128 \
+  --disable_gating=False
+
+# Multi-GPU training with DDP (example with 4 GPUs)
+torchrun --standalone --nproc_per_node=4 train.py \
+  --batch_size=32 \
+  --attention_kernel=power \
+  --degree=2 \
+  --chunk_size=128 \
+  --disable_gating=False
+```
+
+For distributed training across multiple nodes:
+```bash
+# On the first (master) node with IP 123.456.123.456:
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
+
+# On the worker node:
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
+```
+
+Note: If your cluster does not have Infiniband interconnect, prepend `NCCL_IB_DISABLE=1` to the commands.
 
 ## Troubleshooting
 
@@ -102,4 +150,4 @@ print(f"CUDA version: {torch.version.cuda}")
 - Use chunking with smaller chunk sizes
 - Try fast build with lower degree parameters
 
-For more help, check [GitHub issues](https://github.com/manifestai/power-attention/issues).
+For more help, check [GitHub issues](https://github.com/manifest-ai/power-attention/issues).

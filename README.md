@@ -151,14 +151,16 @@ mkdocs gh-deploy
 To immediately see the kernel in action, `cd train` and use:
 
 ```bash
+# Create the dataset first
+python prepare_owt.py
+
 # Single GPU training
 python train.py \
   --batch_size=32 \
   --attention_kernel=power \
   --degree=2 \
   --chunk_size=128 \
-  --disable_gating=False \
-  --out_dir=out/my_model
+  --disable_gating=False
 
 # Multi-GPU training with DDP (example with 4 GPUs)
 torchrun --standalone --nproc_per_node=4 train.py \
@@ -166,8 +168,7 @@ torchrun --standalone --nproc_per_node=4 train.py \
   --attention_kernel=power \
   --degree=2 \
   --chunk_size=128 \
-  --disable_gating=False \
-  --out_dir=out/my_model
+  --disable_gating=False
 ```
 
 For distributed training across multiple nodes:
