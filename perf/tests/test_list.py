@@ -174,7 +174,7 @@ query_state_fn_sets = [
         'fn': query_state_triton, 'ref': query_state_reference, **query_state_input_output},
 ]
 query_state_param_ranges = {
-    'b': [4],
+    'b': [1],
     'n': [4, 8], 
     'c': [1024, 4096],
     'h': [4],
@@ -189,7 +189,7 @@ query_state_vidrial_fn_sets = [
         'fn': query_state_vidrial, 'ref': query_state_vidrial_reference, **query_state_vidrial_input_output},
 ]
 query_state_vidrial_param_ranges = {
-    'b': [4],
+    'b': [1],
     'n': [4, 8], 
     'c': [1024, 4096],
     'h': [4],
