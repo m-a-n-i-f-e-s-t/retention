@@ -37,6 +37,6 @@ def query_state(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state,
 
     O = Y_attn * attn_factor.unsqueeze(-1) + Y_qs * scale_p * qs_factor.unsqueeze(-1) # [b, n, c, h, d]
     l = l_attn * attn_factor + l_qs * scale_p * qs_factor # [b, n, c, h]
-    O = (O.to(torch.float32) / (l.unsqueeze(-1) + 1e-3)).to(Y_qs.dtype)
+    O = (O.to(torch.float32) / (l.unsqueeze(-1))).to(Y_qs.dtype)
     return O.contiguous()
 

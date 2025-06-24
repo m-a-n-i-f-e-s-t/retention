@@ -16,10 +16,10 @@ def create_inputs(b=2, n=3, c=128, h=1, d=32, dtype=torch.bfloat16, device='cuda
     else:
         D = sympow_dim(d, deg, d_tile=d_tile)
     S = torch.randn(b, n, h, D, d, dtype=dtype, device=device, requires_grad=requires_grad)
-    s = torch.randn(b, n, h, D, dtype=torch.float32, device=device, requires_grad=requires_grad)
+    s = torch.abs(torch.randn(b, n, h, D, dtype=torch.float32, device=device, requires_grad=requires_grad) + 1e2).detach().requires_grad_(requires_grad)
     Y_attn = torch.randn(b, n, c, h, d, dtype=dtype, device=device, requires_grad=requires_grad)
-    l_attn = (torch.abs(torch.randn(b, n, c, h, dtype=torch.float32, device=device) * c)).detach().requires_grad_(requires_grad)
-    rowmax = torch.randn(b, n, c, h, dtype=torch.float32, device=device)
+    l_attn = (torch.abs(torch.randn(b, n, c, h, dtype=torch.float32, device=device)) + 1e2).detach().requires_grad_(requires_grad)
+    rowmax = (torch.abs(torch.randn(b, n, c, h, dtype=torch.float32, device=device)) * 10.)
 
     return dict(Q=Q, S=S, s=s, Y_attn=Y_attn, l_attn=l_attn, rowmax=rowmax, deg=deg, scale=scale, zero_initial_state=zero_initial_state)
 

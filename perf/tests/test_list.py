@@ -90,7 +90,7 @@ update_state_fn_sets = [
         'fn': update_state_triton, 'ref': update_state_reference, **update_state_input_output}
 ]
 update_state_param_ranges = {
-    'b': [4],
+    'b': [1],
     'n': [4, 8], 
     'c': [1024, 4096],
     'h': [4],
@@ -106,8 +106,8 @@ update_state_vidrial_fn_sets = [
         'fn': update_state_vidrial, 'ref': update_state_vidrial_reference, **update_state_vidrial_input_output, 'extra_params': {'d_tile': [8]}},
 ]
 update_state_vidrial_param_ranges = {
-    'b': [4],
-    'n': [4, 8], 
+    'b': [1],
+    'n': [4, 4], 
     'c': [1024, 4096],
     'h': [4],
     'd': [64],

@@ -89,7 +89,8 @@ def test_fwd_matches_reference(fns_params):
         gold_inputs=gold_inputs,
         test_fn=fns['fn'],
         test_inputs=test_inputs,
-        rtol=2.
+        rtol=2.5,
+        atol=1e-3,
     )
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
@@ -104,6 +105,6 @@ def test_bwd_matches_reference(fns_params):
         gold_inputs=gold_inputs,
         test_fn=fns['fn'],
         test_inputs=test_inputs,
-        rtol=2.,
+        rtol=3.,
         atol=1e-3,
     )

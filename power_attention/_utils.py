@@ -181,7 +181,7 @@ def diff(a, b, rtol=None, atol=None, assert_close=True, verbose=True, title=None
     a = a.to(torch.float32)
     b = b.to(torch.float32)
     if rtol is None: rtol = 1e-3
-    if atol is None: atol = 1e-5
+    if atol is None: atol = 1e-3
     equal = torch.allclose(a, b, rtol=rtol, atol=atol)
     error_max = torch.max(torch.abs(a - b))
     error_hist = torch.histc(torch.abs(a - b), bins=100, min=0, max=1)

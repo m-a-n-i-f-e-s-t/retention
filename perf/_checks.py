@@ -285,7 +285,14 @@ def check_fn_forwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=N
         violation_pct = get_violation_pct(gold_output, ref_output, test_output, tol=rtol, atol=atol)
         if diff_tol is not None and violation_pct < diff_tol:
             return
-        msg = inspect_diff_details(gold_output, ref_output, test_output, tol=rtol, atol=atol) 
+        msg = inspect_diff_details(gold_output, ref_output, test_output, tol=rtol, atol=atol)
+        if isinstance(gold_output, torch.Tensor):
+            gold_output = [gold_output]
+            ref_output = [ref_output]
+            test_output = [test_output]
+        for i, (gold, ref, test) in enumerate(zip(gold_output, ref_output, test_output)):
+            diff(gold, ref, rtol=rtol, atol=atol, assert_close=False, verbose=True, title=f"gold_output[{i}] vs ref_output[{i}]")
+            diff(gold, test, rtol=rtol, atol=atol, assert_close=False, verbose=True, title=f"gold_output[{i}] vs test_output[{i}]")
         raise AssertionError(f"Precision failure: {e}\n{msg}\nViolation percentage: {violation_pct * 100:.2f}%")
 
 def check_fn_backwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=None, atol=0., diff_tol=None):
