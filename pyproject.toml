@@ -81,7 +81,9 @@ dev = [
   "click",
   "tabulate",
   "flash-linear-attention@git+https://github.com/fla-org/flash-linear-attention",
-  "flash_attn==2.7.3"
+  "flash_attn==2.7.3",
+  "pytest-randomly",
+  "pytest-rerunfailures"
 ]
 
 [tool.cibuildwheel]
@@ -104,20 +106,3 @@ manylinux-x86_64-image = "manylinux2014"
 
 [tool.cibuildwheel.linux]
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel} --plat manylinux2014_x86_64 --exclude libtorch_cpu.so --exclude libtorch_python.so --exclude libc10.so --exclude libtorch_cuda.so --exclude libshm.so --exclude libtorch_global_deps.so --exclude libc10_cuda.so --exclude libcaffe2_nvrtc.so --exclude libtorch_python.so --exclude libtorch_cpu.so --exclude libtorch_cuda.so --exclude libc10.so --exclude libtorch.so --exclude libtorch_cuda_linalg.so"
-
-[tool.pytest.ini_options]
-addopts = [
-    "--import-mode=importlib", '--pyargs',
-]
-pythonpath = [
-    "."
-]
-testpaths = [
-   "perf/tests"
-]
-python_files = "*.py"
-python_functions = "test_*"
-xfail_strict = true
-filterwarnings = [
-    "ignore::DeprecationWarning"
-]
