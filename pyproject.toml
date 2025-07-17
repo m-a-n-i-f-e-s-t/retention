@@ -1,6 +1,6 @@
 [project]
 name = "power-attention"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Kernels for symmetric-power-based linear transformers"
 authors = [
   { name = "Sean Zhang", email = "sean@manifest.com" },
@@ -18,7 +18,7 @@ dependencies = [
   'numpy>=2.2',
   "torch==2.6.0",
   "triton>=3.2",
-  'setuptools',
+  'setuptools>=69.5.1',
   "einops",
   "vidrial==0.1.1",
 ]
@@ -80,7 +80,7 @@ dev = [
   "bokeh",
   "click",
   "tabulate",
-  "flash-linear-attention@git+https://github.com/fla-org/flash-linear-attention",
+  "flash-linear-attention",
   "flash_attn==2.7.3",
   "pytest-randomly",
   "pytest-rerunfailures"

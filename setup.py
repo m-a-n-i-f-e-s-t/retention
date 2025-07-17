@@ -10,14 +10,15 @@ from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
-def get_version():
-    """Get version from pyproject.toml."""
-    with open(os.path.join(this_dir, "pyproject.toml")) as f:
-        content = f.read()
-    version_match = re.search(r'version\s*=\s*"([^"]+)"', content)
-    if not version_match:
-        raise RuntimeError("Could not find version in pyproject.toml")
-    return version_match.group(1)
+def get_version(base_version):
+    """Get version from pyproject.toml, optionally with torch version as local identifier."""
+    
+    # Add torch version as local version identifier if specified
+    torch_version = torch.__version__
+    if torch_version:
+        return f"{base_version}+torch{torch_version.replace('+', '')}"
+    
+    return base_version
 
 def get_dependencies():
     """Get dependencies from pyproject.toml."""
@@ -281,7 +282,7 @@ dev_requires = get_dependencies()
 
 setup(
     name=PACKAGE_NAME,
-    version=get_version(),
+    version=get_version('1.0.0'),
     packages=find_packages(
         exclude=('build', 'csrc', 'include', 'tests', 'dist', 'benchmarks'),
     ),
