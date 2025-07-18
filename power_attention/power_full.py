@@ -3,10 +3,10 @@
 
 ## IMPLEMENTATION ##
 import torch
-from power_attention._attention import attention_cuda, attention_reference, attention_triton
-from power_attention._update_state import update_state_cuda, update_state_reference, update_state_triton, update_state_vidrial_reference, update_state_vidrial
-from power_attention._discumsum import discumsum, discumsum_reference
-from power_attention._query_state import query_state_cuda, query_state_reference, query_state_triton, query_state_vidrial_reference, query_state_vidrial
+from power_attention._attention import attention_reference, attention_triton
+from power_attention._update_state import update_state_reference, update_state_triton, update_state_vidrial_reference, update_state_vidrial
+from power_attention._discumsum import discumsum_triton, discumsum_reference
+from power_attention._query_state import query_state_reference, query_state_triton, query_state_vidrial_reference, query_state_vidrial
 
 POWER_FULL_DOC = r"""
 Compute symmetric power attention with optional chunking.
@@ -199,11 +199,12 @@ def _make_power_full(update_state_impl, query_state_impl, discumsum_impl, attent
     _power_full.__doc__ = POWER_FULL_DOC
     return _power_full
 
-power_full = power_full_triton = _make_power_full(update_state_triton, query_state_triton, discumsum, attention_triton)
-power_full_cuda = _make_power_full(update_state_cuda, query_state_cuda, discumsum, attention_cuda)
+power_full = power_full_triton = _make_power_full(update_state_triton, query_state_triton, discumsum_triton, attention_triton)
+# legacy cuda implementation is being deprecated
+# power_full_cuda = _make_power_full(update_state_cuda, query_state_cuda, discumsum, attention_cuda)
 power_full_reference = _make_power_full(update_state_reference, query_state_reference, discumsum_reference, attention_reference)
 power_full_vidrial_reference = _make_power_full(update_state_vidrial_reference, query_state_vidrial_reference, discumsum_reference, attention_reference)
-power_full_vidrial = _make_power_full(update_state_vidrial, query_state_vidrial, discumsum_reference, attention_triton)
+power_full_vidrial = _make_power_full(update_state_vidrial, query_state_vidrial, discumsum_triton, attention_triton)
 
 ## TUTORIAL ##
 if __name__ == '__main__':

@@ -34,7 +34,7 @@ from power_attention._attention import (
     output_properties as attention_output_properties,
     attention_reference,
     attention_reference_fwd,
-    attention_cuda,
+    # attention_cuda,
     attention_triton,
 )
 attention_input_output = {'create_inputs': attention_create_inputs, 'input_properties': attention_input_properties, 'output_properties': attention_output_properties}
@@ -71,7 +71,7 @@ from power_attention._update_state import (
     output_properties as update_state_output_properties,
     update_state_reference,
     update_state_reference_fwd,
-    update_state_cuda,
+    # update_state_cuda,
     update_state_triton,
     update_state_vidrial_reference,
     update_state_vidrial
@@ -125,12 +125,15 @@ from power_attention._discumsum import (
     input_properties as discumsum_input_properties,
     output_properties as discumsum_output_properties,
     discumsum_reference,
-    discumsum as discumsum_cuda,
+    # discumsum as discumsum_cuda,
+    discumsum_triton
 )
 discumsum_input_output = {'create_inputs': discumsum_create_inputs, 'input_properties': discumsum_input_properties, 'output_properties': discumsum_output_properties}
 discumsum_fn_sets = [
-    {'name': 'discumsum_cuda', 'extends': 'discumsum', 'impl': 'cuda',
-        'fn': discumsum_cuda, 'ref': discumsum_reference, **discumsum_input_output},
+    # {'name': 'discumsum_cuda', 'extends': 'discumsum', 'impl': 'cuda',
+    #     'fn': discumsum_cuda, 'ref': discumsum_reference, **discumsum_input_output},
+    {'name': 'discumsum_triton', 'extends': 'discumsum', 'impl': 'triton',
+        'fn': discumsum_triton, 'ref': discumsum_reference, **discumsum_input_output},
 ]
 discumsum_param_ranges = {
     'b': [1, 2],
@@ -155,7 +158,7 @@ from power_attention._query_state import (
     output_properties as query_state_output_properties,
     query_state_reference,
     query_state_reference_fwd,
-    query_state_cuda,
+    # query_state_cuda,
     query_state_triton,
     query_state_vidrial_reference,
     query_state_vidrial,
