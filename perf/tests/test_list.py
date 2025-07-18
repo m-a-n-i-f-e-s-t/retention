@@ -210,13 +210,13 @@ QUERY_STATE_TEST_CASES += fn_set_and_param_range_to_test_cases(query_state_vidri
 ## power full
 
 from power_attention import (
-    power_full_reference,
-    power_full,
-    power_full_vidrial_reference,
     create_inputs as power_full_create_inputs,
     input_properties as power_full_input_properties,
     output_properties as power_full_output_properties,
 )
+from power_attention.reference import power_full as power_full_reference
+from power_attention.vidrial_reference import power_full as power_full_vidrial_reference
+from power_attention.triton import power_full
 power_full_input_output = {'create_inputs': power_full_create_inputs, 'input_properties': power_full_input_properties, 'output_properties': power_full_output_properties}
 power_full_fn_sets = [
     {'name': 'power_full_reference', 'extends': 'power_full', 'impl': 'reference',
