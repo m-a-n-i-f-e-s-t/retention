@@ -1,6 +1,10 @@
 [project]
 name = "power-attention"
+<<<<<<< HEAD
 version = "1.1.0"
+=======
+dynamic = ["version"]
+>>>>>>> origin/main
 description = "Kernels for symmetric-power-based linear transformers"
 authors = [
   { name = "Sean Zhang", email = "sean@manifest.com" },
@@ -18,7 +22,7 @@ dependencies = [
   'numpy>=2.2',
   "torch==2.6.0",
   "triton>=3.2",
-  'setuptools',
+  'setuptools>=69.5.1',
   "einops",
   "vidrial==0.1.1",
   # "power-attention-cuda @ https://github.com/m-a-n-i-f-e-s-t/power-attention-cuda/releases/download/0.1.0/power_attention_cuda-0.1.0+torch2.6.0-cp311-cp311-manylinux2014_x86_64.whl",
@@ -80,8 +84,15 @@ dev = [
   "bokeh",
   "click",
   "tabulate",
+<<<<<<< HEAD
   "flash-linear-attention@git+https://github.com/fla-org/flash-linear-attention",
   "flash_attn==2.7.3"
+=======
+  "flash-linear-attention",
+  "flash_attn==2.7.3",
+  "pytest-randomly",
+  "pytest-rerunfailures"
+>>>>>>> origin/main
 ]
 
 [tool.cibuildwheel]
