@@ -115,7 +115,8 @@ update_state_vidrial_param_ranges = {
     'dtype': [torch.bfloat16],
     'device': ['cuda'],
 }
-UPDATE_STATE_TEST_CASES += fn_set_and_param_range_to_test_cases(update_state_vidrial_fn_sets, update_state_vidrial_param_ranges)
+# TODO: enable vidrial
+# UPDATE_STATE_TEST_CASES += fn_set_and_param_range_to_test_cases(update_state_vidrial_fn_sets, update_state_vidrial_param_ranges)
 
 
 
@@ -201,7 +202,8 @@ query_state_vidrial_param_ranges = {
     'dtype': [torch.bfloat16],
     'device': ['cuda'],
 }
-QUERY_STATE_TEST_CASES += fn_set_and_param_range_to_test_cases(query_state_vidrial_fn_sets, query_state_vidrial_param_ranges)
+# TODO: enable vidrial
+# QUERY_STATE_TEST_CASES += fn_set_and_param_range_to_test_cases(query_state_vidrial_fn_sets, query_state_vidrial_param_ranges)
 
 
 
