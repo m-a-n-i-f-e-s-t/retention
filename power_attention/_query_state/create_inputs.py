@@ -16,9 +16,9 @@ def create_inputs(b=2, n=3, c=128, h=1, d=32, dtype=torch.bfloat16, device='cuda
     else:
         D = sympow_dim(d, deg, d_tile=d_tile)
     S = torch.randn(b, n, h, D, d, dtype=dtype, device=device, requires_grad=requires_grad)
-    s = (torch.randn(b, n, h, D, dtype=torch.float32, device=device, requires_grad=requires_grad).abs() + 10.0).detach().requires_grad_(requires_grad)
+    s = (torch.randn(b, n, h, D, dtype=torch.float32, device=device, requires_grad=requires_grad).abs()*c + 1e3).detach().requires_grad_(requires_grad)
     Y_attn = torch.randn(b, n, c, h, d, dtype=dtype, device=device, requires_grad=requires_grad)
-    l_attn = (torch.abs(torch.randn(b, n, c, h, dtype=torch.float32, device=device) * c)  + 10.0).detach().requires_grad_(requires_grad)
+    l_attn = (torch.abs(torch.randn(b, n, c, h, dtype=torch.float32, device=device)*c)  + 1e3).detach().requires_grad_(requires_grad)
     rowmax = torch.randn(b, n, c, h, dtype=torch.float32, device=device)
     if not fused_norm:
         return dict(Q=Q, S=S, s=s, Y_attn=Y_attn, l_attn=l_attn, rowmax=rowmax, deg=deg, scale=scale, zero_initial_state=zero_initial_state)
