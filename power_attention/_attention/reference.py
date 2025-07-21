@@ -37,8 +37,8 @@ def attention(Q, K, V, log_G, deg, r=1, w=1, causal=True, head_first=False, scal
 
     _qidx = torch.arange(ctx*r, device=Q.device).unsqueeze(1)
     _kidx = torch.arange(ctx*w, device=K.device).unsqueeze(0)
-    m = (_qidx // r) >= (_kidx // w)
     s = torch.matmul(Q, K.transpose(2,3)) * scale
+    m = (_qidx // r) >= (_kidx // w) if causal else torch.ones_like(s, dtype=torch.bool)
     signs = torch.sign(s)
     s = float(deg) * torch.where(m, log(s.abs() + 1e-7), -float("inf"))
     if log_G is not None:

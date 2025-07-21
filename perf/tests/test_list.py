@@ -50,11 +50,13 @@ attention_fn_sets = [
 attention_param_ranges = {
     'b': [4],
     't': [128, 1024],
-    'h': [4],
+    'h': [2],
     'd': [32, 64],
     'deg': [2, 4],
     'scale': [1.0, 1/8.0],
     'gating': [False, True],
+    'norm': [True],
+    'causal': [False, True],
     'dtype': [torch.bfloat16, torch.float16],
     'device': ['cuda'],
 }
@@ -91,9 +93,9 @@ update_state_fn_sets = [
 ]
 update_state_param_ranges = {
     'b': [1],
-    'n': [4, 8], 
-    'c': [1024, 4096],
-    'h': [4],
+    'n': [2, 4], 
+    'c': [128, 1024],
+    'h': [2],
     'd': [32, 64],
     'deg': [2],
     'dtype': [torch.bfloat16],
@@ -107,8 +109,8 @@ update_state_vidrial_fn_sets = [
 ]
 update_state_vidrial_param_ranges = {
     'b': [1],
-    'n': [4, 4], 
-    'c': [1024, 4096],
+    'n': [2, 4], 
+    'c': [128, 1024],
     'h': [4],
     'd': [64],
     'deg': [2],
@@ -138,8 +140,8 @@ discumsum_fn_sets = [
 ]
 discumsum_param_ranges = {
     'b': [1, 2],
-    'n': [8, 32],
-    'h': [4, 8],
+    'n': [1, 8, 32],
+    'h': [1, 2],
     'D': [4],
     'd': [32, 64],
     'dtype': [torch.float16, torch.bfloat16],
@@ -179,9 +181,9 @@ query_state_fn_sets = [
 ]
 query_state_param_ranges = {
     'b': [1],
-    'n': [4, 8], 
-    'c': [1024, 4096],
-    'h': [4],
+    'n': [2, 4], 
+    'c': [128, 1024],
+    'h': [2],
     'd': [32, 64],
     'dtype': [torch.bfloat16],
     'device': ['cuda'],
@@ -194,9 +196,9 @@ query_state_vidrial_fn_sets = [
 ]
 query_state_vidrial_param_ranges = {
     'b': [1],
-    'n': [4, 8], 
-    'c': [1024, 4096],
-    'h': [4],
+    'n': [2, 4], 
+    'c': [128, 1024],
+    'h': [2],
     'd': [64],
     'deg': [2],
     'dtype': [torch.bfloat16],
@@ -231,15 +233,14 @@ power_full_fn_sets = [
 # Define parameter ranges
 power_full_param_ranges = {
     'b': [1],
-    't': [1024, 4096], 
-    'h': [1],
+    't': [128, 1024], 
+    'h': [2],
     'd': [32, 64],
     'qhead_ratio': [1],
     'dtype': [torch.bfloat16],
     'device': ['cuda'],
     'gating': [False, True],
-    'chunk_size': [None, 1024],
-    'deg': [2],
-    'scale': [1/8.0],
+    'chunk_size': [None, 128],
+    'deg': [2]
 }
 POWER_FULL_TEST_CASES = fn_set_and_param_range_to_test_cases(power_full_fn_sets, power_full_param_ranges)
