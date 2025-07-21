@@ -19,7 +19,7 @@ jobs:
 
     - name: Create virtual environment
       run: |
-        python3.11 -m venv .venv
+        python3.12 -m venv .venv
         source .venv/bin/activate
         python -m pip install --upgrade pip
 
