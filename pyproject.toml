@@ -20,7 +20,7 @@ dependencies = [
   "triton>=3.2",
   'setuptools>=69.5.1',
   "einops",
-  "vidrial==0.1.1",
+  "vidrial==0.1.2",
   # "power-attention-cuda @ https://github.com/m-a-n-i-f-e-s-t/power-attention-cuda/releases/download/0.1.0/power_attention_cuda-0.1.0+torch2.6.0-cp311-cp311-manylinux2014_x86_64.whl",
 ]
 
