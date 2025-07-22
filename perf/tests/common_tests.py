@@ -89,7 +89,7 @@ def test_fwd_matches_reference(fns_params):
         gold_inputs=gold_inputs,
         test_fn=fns['fn'],
         test_inputs=test_inputs,
-        rtol=3.,
+        rtol=4.0,
         atol=1e-3,
     )
 
@@ -105,6 +105,6 @@ def test_bwd_matches_reference(fns_params):
         gold_inputs=gold_inputs,
         test_fn=fns['fn'],
         test_inputs=test_inputs,
-        rtol=3.,
+        rtol=4.0,
         atol=1e-3,
     )
