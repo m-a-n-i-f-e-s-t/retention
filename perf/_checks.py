@@ -342,8 +342,6 @@ def check_fn_backwards_match(*, ref_fn, gold_inputs, test_fn, test_inputs, rtol=
     test_output = get_outputs_with_grad(test_fn(**test_inputs))
     torch.autograd.backward(test_output, grad_tensors=_create_grad_tensors(test_output))
     test_grads = clone_grads(test_inputs)
-    for name, grad in test_grads.items():
-        print(f"{name=}, {grad.shape=}, {grad.sum()=}")
 
     sanity_check_tensors([gold_grads, ref_grads, test_grads])
     ref_err = compare(gold_grads, ref_grads)
