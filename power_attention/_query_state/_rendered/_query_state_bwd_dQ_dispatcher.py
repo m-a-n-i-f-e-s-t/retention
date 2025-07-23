@@ -67,7 +67,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             tl.store(p_dl_attn, dl_attn, mask=range_t < c)
             
             # --- compute dY_attn ---
-            do = tl.load(p_do) # [BLOCK_T x e]
+            do = tl.load(p_do, mask=(range_t < c)[:, None], other=0.0) # [BLOCK_T x e]
             dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
             tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
             
@@ -160,7 +160,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             tl.store(p_dl_attn, dl_attn, mask=range_t < c)
             
             # --- compute dY_attn ---
-            do = tl.load(p_do) # [BLOCK_T x e]
+            do = tl.load(p_do, mask=(range_t < c)[:, None], other=0.0) # [BLOCK_T x e]
             dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
             tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
             
@@ -269,7 +269,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             tl.store(p_dl_attn, dl_attn, mask=range_t < c)
             
             # --- compute dY_attn ---
-            do = tl.load(p_do) # [BLOCK_T x e]
+            do = tl.load(p_do, mask=(range_t < c)[:, None], other=0.0) # [BLOCK_T x e]
             dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
             tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
             
@@ -411,7 +411,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             tl.store(p_dl_attn, dl_attn, mask=range_t < c)
             
             # --- compute dY_attn ---
-            do = tl.load(p_do) # [BLOCK_T x e]
+            do = tl.load(p_do, mask=(range_t < c)[:, None], other=0.0) # [BLOCK_T x e]
             dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
             tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
             
@@ -525,7 +525,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             tl.store(p_dl_attn, dl_attn, mask=range_t < c)
             
             # --- compute dY_attn ---
-            do = tl.load(p_do) # [BLOCK_T x e]
+            do = tl.load(p_do, mask=(range_t < c)[:, None], other=0.0) # [BLOCK_T x e]
             dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
             tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
             
@@ -665,7 +665,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             tl.store(p_dl_attn, dl_attn, mask=range_t < c)
             
             # --- compute dY_attn ---
-            do = tl.load(p_do) # [BLOCK_T x e]
+            do = tl.load(p_do, mask=(range_t < c)[:, None], other=0.0) # [BLOCK_T x e]
             dy_attn = (do * attn_factor[:, None]).to(Q.dtype.element_ty) # BLOCK_T x e
             tl.store(p_dy_attn, dy_attn, mask=(range_t < c)[:, None])
             

@@ -75,30 +75,32 @@ def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
                 gamma = tl.sqrt(D).to(tl.float32)
             
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
-                p_m = M + (range_t + tid * BLOCK_T) * stride_mt # [BLOCK_T]
-                p_delta = Delta + (range_t + tid * BLOCK_T) * stride_dt # [BLOCK_T]
-                p_l = L + (range_t + tid * BLOCK_T) * stride_lt # [BLOCK_T]
-                rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                delta = tl.load(p_delta, mask=(range_t + tid * BLOCK_T) < c, other=0.)
-                l = tl.load(p_l, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
+                real_range_t = range_t + tid * BLOCK_T
+                p_m = M + real_range_t * stride_mt # [BLOCK_T]
+                p_delta = Delta + real_range_t * stride_dt # [BLOCK_T]
+                p_l = L + real_range_t * stride_lt # [BLOCK_T]
+                mask_t = real_range_t < c
+                rowmax = tl.load(p_m, mask=mask_t, other=float('inf'))
+                delta = tl.load(p_delta, mask=mask_t, other=0.)
+                l = tl.load(p_l, mask=mask_t, other=float('inf'))
+                qT_d1 = tl.load(p_qT_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+                do = tl.load(p_do, mask=mask_t[:, None], other=0.0) # [BLOCK_T x BLOCK_E_VALID]
             
-                q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
+                q_d2_0 = tl.load(p_q_d2_0, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
-                q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
+                q_d2_1 = tl.load(p_q_d2_1, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_1 = qT_d1 * q_d2_1[None, :] # [block1 x BLOCK_T]
-                q_d2_2 = tl.load(p_q_d2_2) # BLOCK_T
+                q_d2_2 = tl.load(p_q_d2_2, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_2 = qT_d1 * q_d2_2[None, :] # [block1 x BLOCK_T]
-                q_d2_3 = tl.load(p_q_d2_3) # BLOCK_T
+                q_d2_3 = tl.load(p_q_d2_3, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_3 = qT_d1 * q_d2_3[None, :] # [block1 x BLOCK_T]
-                q_d2_4 = tl.load(p_q_d2_4) # BLOCK_T
+                q_d2_4 = tl.load(p_q_d2_4, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_4 = qT_d1 * q_d2_4[None, :] # [block1 x BLOCK_T]
-                q_d2_5 = tl.load(p_q_d2_5) # BLOCK_T
+                q_d2_5 = tl.load(p_q_d2_5, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_5 = qT_d1 * q_d2_5[None, :] # [block1 x BLOCK_T]
-                q_d2_6 = tl.load(p_q_d2_6) # BLOCK_T
+                q_d2_6 = tl.load(p_q_d2_6, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_6 = qT_d1 * q_d2_6[None, :] # [block1 x BLOCK_T]
-                q_d2_7 = tl.load(p_q_d2_7) # BLOCK_T
+                q_d2_7 = tl.load(p_q_d2_7, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_7 = qT_d1 * q_d2_7[None, :] # [block1 x BLOCK_T]
                 alpha = tl.maximum(gamma, tl.exp(rowmax)) # [BLOCK_T]
                 factor = 1 / alpha / l # [BLOCK_T]
@@ -231,30 +233,32 @@ def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
                 gamma = tl.sqrt(D).to(tl.float32)
             
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
-                p_m = M + (range_t + tid * BLOCK_T) * stride_mt # [BLOCK_T]
-                p_delta = Delta + (range_t + tid * BLOCK_T) * stride_dt # [BLOCK_T]
-                p_l = L + (range_t + tid * BLOCK_T) * stride_lt # [BLOCK_T]
-                rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                delta = tl.load(p_delta, mask=(range_t + tid * BLOCK_T) < c, other=0.)
-                l = tl.load(p_l, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
+                real_range_t = range_t + tid * BLOCK_T
+                p_m = M + real_range_t * stride_mt # [BLOCK_T]
+                p_delta = Delta + real_range_t * stride_dt # [BLOCK_T]
+                p_l = L + real_range_t * stride_lt # [BLOCK_T]
+                mask_t = real_range_t < c
+                rowmax = tl.load(p_m, mask=mask_t, other=float('inf'))
+                delta = tl.load(p_delta, mask=mask_t, other=0.)
+                l = tl.load(p_l, mask=mask_t, other=float('inf'))
+                qT_d1 = tl.load(p_qT_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+                do = tl.load(p_do, mask=mask_t[:, None], other=0.0) # [BLOCK_T x BLOCK_E_VALID]
             
-                q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
+                q_d2_0 = tl.load(p_q_d2_0, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
-                q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
+                q_d2_1 = tl.load(p_q_d2_1, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_1 = qT_d1 * q_d2_1[None, :] # [block1 x BLOCK_T]
-                q_d2_2 = tl.load(p_q_d2_2) # BLOCK_T
+                q_d2_2 = tl.load(p_q_d2_2, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_2 = qT_d1 * q_d2_2[None, :] # [block1 x BLOCK_T]
-                q_d2_3 = tl.load(p_q_d2_3) # BLOCK_T
+                q_d2_3 = tl.load(p_q_d2_3, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_3 = qT_d1 * q_d2_3[None, :] # [block1 x BLOCK_T]
-                q_d2_4 = tl.load(p_q_d2_4) # BLOCK_T
+                q_d2_4 = tl.load(p_q_d2_4, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_4 = qT_d1 * q_d2_4[None, :] # [block1 x BLOCK_T]
-                q_d2_5 = tl.load(p_q_d2_5) # BLOCK_T
+                q_d2_5 = tl.load(p_q_d2_5, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_5 = qT_d1 * q_d2_5[None, :] # [block1 x BLOCK_T]
-                q_d2_6 = tl.load(p_q_d2_6) # BLOCK_T
+                q_d2_6 = tl.load(p_q_d2_6, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_6 = qT_d1 * q_d2_6[None, :] # [block1 x BLOCK_T]
-                q_d2_7 = tl.load(p_q_d2_7) # BLOCK_T
+                q_d2_7 = tl.load(p_q_d2_7, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_7 = qT_d1 * q_d2_7[None, :] # [block1 x BLOCK_T]
                 alpha = tl.maximum(gamma, tl.exp(rowmax)) # [BLOCK_T]
                 factor = 1 / alpha / l # [BLOCK_T]
@@ -387,30 +391,32 @@ def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
                 gamma = tl.sqrt(D).to(tl.float32)
             
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
-                p_m = M + (range_t + tid * BLOCK_T) * stride_mt # [BLOCK_T]
-                p_delta = Delta + (range_t + tid * BLOCK_T) * stride_dt # [BLOCK_T]
-                p_l = L + (range_t + tid * BLOCK_T) * stride_lt # [BLOCK_T]
-                rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                delta = tl.load(p_delta, mask=(range_t + tid * BLOCK_T) < c, other=0.)
-                l = tl.load(p_l, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
+                real_range_t = range_t + tid * BLOCK_T
+                p_m = M + real_range_t * stride_mt # [BLOCK_T]
+                p_delta = Delta + real_range_t * stride_dt # [BLOCK_T]
+                p_l = L + real_range_t * stride_lt # [BLOCK_T]
+                mask_t = real_range_t < c
+                rowmax = tl.load(p_m, mask=mask_t, other=float('inf'))
+                delta = tl.load(p_delta, mask=mask_t, other=0.)
+                l = tl.load(p_l, mask=mask_t, other=float('inf'))
+                qT_d1 = tl.load(p_qT_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+                do = tl.load(p_do, mask=mask_t[:, None], other=0.0) # [BLOCK_T x BLOCK_E_VALID]
             
-                q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
+                q_d2_0 = tl.load(p_q_d2_0, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
-                q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
+                q_d2_1 = tl.load(p_q_d2_1, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_1 = qT_d1 * q_d2_1[None, :] # [block1 x BLOCK_T]
-                q_d2_2 = tl.load(p_q_d2_2) # BLOCK_T
+                q_d2_2 = tl.load(p_q_d2_2, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_2 = qT_d1 * q_d2_2[None, :] # [block1 x BLOCK_T]
-                q_d2_3 = tl.load(p_q_d2_3) # BLOCK_T
+                q_d2_3 = tl.load(p_q_d2_3, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_3 = qT_d1 * q_d2_3[None, :] # [block1 x BLOCK_T]
-                q_d2_4 = tl.load(p_q_d2_4) # BLOCK_T
+                q_d2_4 = tl.load(p_q_d2_4, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_4 = qT_d1 * q_d2_4[None, :] # [block1 x BLOCK_T]
-                q_d2_5 = tl.load(p_q_d2_5) # BLOCK_T
+                q_d2_5 = tl.load(p_q_d2_5, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_5 = qT_d1 * q_d2_5[None, :] # [block1 x BLOCK_T]
-                q_d2_6 = tl.load(p_q_d2_6) # BLOCK_T
+                q_d2_6 = tl.load(p_q_d2_6, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_6 = qT_d1 * q_d2_6[None, :] # [block1 x BLOCK_T]
-                q_d2_7 = tl.load(p_q_d2_7) # BLOCK_T
+                q_d2_7 = tl.load(p_q_d2_7, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_7 = qT_d1 * q_d2_7[None, :] # [block1 x BLOCK_T]
                 alpha = tl.maximum(gamma, tl.exp(rowmax)) # [BLOCK_T]
                 factor = 1 / alpha / l # [BLOCK_T]
@@ -568,46 +574,48 @@ def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
                 gamma = tl.sqrt(D).to(tl.float32)
             
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
-                p_m = M + (range_t + tid * BLOCK_T) * stride_mt # [BLOCK_T]
-                p_delta = Delta + (range_t + tid * BLOCK_T) * stride_dt # [BLOCK_T]
-                p_l = L + (range_t + tid * BLOCK_T) * stride_lt # [BLOCK_T]
-                rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                delta = tl.load(p_delta, mask=(range_t + tid * BLOCK_T) < c, other=0.)
-                l = tl.load(p_l, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
+                real_range_t = range_t + tid * BLOCK_T
+                p_m = M + real_range_t * stride_mt # [BLOCK_T]
+                p_delta = Delta + real_range_t * stride_dt # [BLOCK_T]
+                p_l = L + real_range_t * stride_lt # [BLOCK_T]
+                mask_t = real_range_t < c
+                rowmax = tl.load(p_m, mask=mask_t, other=float('inf'))
+                delta = tl.load(p_delta, mask=mask_t, other=0.)
+                l = tl.load(p_l, mask=mask_t, other=float('inf'))
+                qT_d1 = tl.load(p_qT_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+                do = tl.load(p_do, mask=mask_t[:, None], other=0.0) # [BLOCK_T x BLOCK_E_VALID]
             
-                q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
+                q_d2_0 = tl.load(p_q_d2_0, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
-                q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
+                q_d2_1 = tl.load(p_q_d2_1, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_1 = qT_d1 * q_d2_1[None, :] # [block1 x BLOCK_T]
-                q_d2_2 = tl.load(p_q_d2_2) # BLOCK_T
+                q_d2_2 = tl.load(p_q_d2_2, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_2 = qT_d1 * q_d2_2[None, :] # [block1 x BLOCK_T]
-                q_d2_3 = tl.load(p_q_d2_3) # BLOCK_T
+                q_d2_3 = tl.load(p_q_d2_3, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_3 = qT_d1 * q_d2_3[None, :] # [block1 x BLOCK_T]
-                q_d2_4 = tl.load(p_q_d2_4) # BLOCK_T
+                q_d2_4 = tl.load(p_q_d2_4, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_4 = qT_d1 * q_d2_4[None, :] # [block1 x BLOCK_T]
-                q_d2_5 = tl.load(p_q_d2_5) # BLOCK_T
+                q_d2_5 = tl.load(p_q_d2_5, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_5 = qT_d1 * q_d2_5[None, :] # [block1 x BLOCK_T]
-                q_d2_6 = tl.load(p_q_d2_6) # BLOCK_T
+                q_d2_6 = tl.load(p_q_d2_6, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_6 = qT_d1 * q_d2_6[None, :] # [block1 x BLOCK_T]
-                q_d2_7 = tl.load(p_q_d2_7) # BLOCK_T
+                q_d2_7 = tl.load(p_q_d2_7, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_7 = qT_d1 * q_d2_7[None, :] # [block1 x BLOCK_T]
-                q_d2_8 = tl.load(p_q_d2_8) # BLOCK_T
+                q_d2_8 = tl.load(p_q_d2_8, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_8 = qT_d1 * q_d2_8[None, :] # [block1 x BLOCK_T]
-                q_d2_9 = tl.load(p_q_d2_9) # BLOCK_T
+                q_d2_9 = tl.load(p_q_d2_9, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_9 = qT_d1 * q_d2_9[None, :] # [block1 x BLOCK_T]
-                q_d2_10 = tl.load(p_q_d2_10) # BLOCK_T
+                q_d2_10 = tl.load(p_q_d2_10, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_10 = qT_d1 * q_d2_10[None, :] # [block1 x BLOCK_T]
-                q_d2_11 = tl.load(p_q_d2_11) # BLOCK_T
+                q_d2_11 = tl.load(p_q_d2_11, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_11 = qT_d1 * q_d2_11[None, :] # [block1 x BLOCK_T]
-                q_d2_12 = tl.load(p_q_d2_12) # BLOCK_T
+                q_d2_12 = tl.load(p_q_d2_12, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_12 = qT_d1 * q_d2_12[None, :] # [block1 x BLOCK_T]
-                q_d2_13 = tl.load(p_q_d2_13) # BLOCK_T
+                q_d2_13 = tl.load(p_q_d2_13, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_13 = qT_d1 * q_d2_13[None, :] # [block1 x BLOCK_T]
-                q_d2_14 = tl.load(p_q_d2_14) # BLOCK_T
+                q_d2_14 = tl.load(p_q_d2_14, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_14 = qT_d1 * q_d2_14[None, :] # [block1 x BLOCK_T]
-                q_d2_15 = tl.load(p_q_d2_15) # BLOCK_T
+                q_d2_15 = tl.load(p_q_d2_15, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_15 = qT_d1 * q_d2_15[None, :] # [block1 x BLOCK_T]
                 alpha = tl.maximum(gamma, tl.exp(rowmax)) # [BLOCK_T]
                 factor = 1 / alpha / l # [BLOCK_T]
@@ -828,46 +836,48 @@ def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
                 gamma = tl.sqrt(D).to(tl.float32)
             
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
-                p_m = M + (range_t + tid * BLOCK_T) * stride_mt # [BLOCK_T]
-                p_delta = Delta + (range_t + tid * BLOCK_T) * stride_dt # [BLOCK_T]
-                p_l = L + (range_t + tid * BLOCK_T) * stride_lt # [BLOCK_T]
-                rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                delta = tl.load(p_delta, mask=(range_t + tid * BLOCK_T) < c, other=0.)
-                l = tl.load(p_l, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
+                real_range_t = range_t + tid * BLOCK_T
+                p_m = M + real_range_t * stride_mt # [BLOCK_T]
+                p_delta = Delta + real_range_t * stride_dt # [BLOCK_T]
+                p_l = L + real_range_t * stride_lt # [BLOCK_T]
+                mask_t = real_range_t < c
+                rowmax = tl.load(p_m, mask=mask_t, other=float('inf'))
+                delta = tl.load(p_delta, mask=mask_t, other=0.)
+                l = tl.load(p_l, mask=mask_t, other=float('inf'))
+                qT_d1 = tl.load(p_qT_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+                do = tl.load(p_do, mask=mask_t[:, None], other=0.0) # [BLOCK_T x BLOCK_E_VALID]
             
-                q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
+                q_d2_0 = tl.load(p_q_d2_0, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
-                q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
+                q_d2_1 = tl.load(p_q_d2_1, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_1 = qT_d1 * q_d2_1[None, :] # [block1 x BLOCK_T]
-                q_d2_2 = tl.load(p_q_d2_2) # BLOCK_T
+                q_d2_2 = tl.load(p_q_d2_2, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_2 = qT_d1 * q_d2_2[None, :] # [block1 x BLOCK_T]
-                q_d2_3 = tl.load(p_q_d2_3) # BLOCK_T
+                q_d2_3 = tl.load(p_q_d2_3, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_3 = qT_d1 * q_d2_3[None, :] # [block1 x BLOCK_T]
-                q_d2_4 = tl.load(p_q_d2_4) # BLOCK_T
+                q_d2_4 = tl.load(p_q_d2_4, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_4 = qT_d1 * q_d2_4[None, :] # [block1 x BLOCK_T]
-                q_d2_5 = tl.load(p_q_d2_5) # BLOCK_T
+                q_d2_5 = tl.load(p_q_d2_5, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_5 = qT_d1 * q_d2_5[None, :] # [block1 x BLOCK_T]
-                q_d2_6 = tl.load(p_q_d2_6) # BLOCK_T
+                q_d2_6 = tl.load(p_q_d2_6, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_6 = qT_d1 * q_d2_6[None, :] # [block1 x BLOCK_T]
-                q_d2_7 = tl.load(p_q_d2_7) # BLOCK_T
+                q_d2_7 = tl.load(p_q_d2_7, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_7 = qT_d1 * q_d2_7[None, :] # [block1 x BLOCK_T]
-                q_d2_8 = tl.load(p_q_d2_8) # BLOCK_T
+                q_d2_8 = tl.load(p_q_d2_8, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_8 = qT_d1 * q_d2_8[None, :] # [block1 x BLOCK_T]
-                q_d2_9 = tl.load(p_q_d2_9) # BLOCK_T
+                q_d2_9 = tl.load(p_q_d2_9, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_9 = qT_d1 * q_d2_9[None, :] # [block1 x BLOCK_T]
-                q_d2_10 = tl.load(p_q_d2_10) # BLOCK_T
+                q_d2_10 = tl.load(p_q_d2_10, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_10 = qT_d1 * q_d2_10[None, :] # [block1 x BLOCK_T]
-                q_d2_11 = tl.load(p_q_d2_11) # BLOCK_T
+                q_d2_11 = tl.load(p_q_d2_11, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_11 = qT_d1 * q_d2_11[None, :] # [block1 x BLOCK_T]
-                q_d2_12 = tl.load(p_q_d2_12) # BLOCK_T
+                q_d2_12 = tl.load(p_q_d2_12, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_12 = qT_d1 * q_d2_12[None, :] # [block1 x BLOCK_T]
-                q_d2_13 = tl.load(p_q_d2_13) # BLOCK_T
+                q_d2_13 = tl.load(p_q_d2_13, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_13 = qT_d1 * q_d2_13[None, :] # [block1 x BLOCK_T]
-                q_d2_14 = tl.load(p_q_d2_14) # BLOCK_T
+                q_d2_14 = tl.load(p_q_d2_14, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_14 = qT_d1 * q_d2_14[None, :] # [block1 x BLOCK_T]
-                q_d2_15 = tl.load(p_q_d2_15) # BLOCK_T
+                q_d2_15 = tl.load(p_q_d2_15, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_15 = qT_d1 * q_d2_15[None, :] # [block1 x BLOCK_T]
                 alpha = tl.maximum(gamma, tl.exp(rowmax)) # [BLOCK_T]
                 factor = 1 / alpha / l # [BLOCK_T]
@@ -1088,46 +1098,48 @@ def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
                 gamma = tl.sqrt(D).to(tl.float32)
             
             for tid in range(0, tl.cdiv(c, BLOCK_T)):
-                p_m = M + (range_t + tid * BLOCK_T) * stride_mt # [BLOCK_T]
-                p_delta = Delta + (range_t + tid * BLOCK_T) * stride_dt # [BLOCK_T]
-                p_l = L + (range_t + tid * BLOCK_T) * stride_lt # [BLOCK_T]
-                rowmax = tl.load(p_m, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                delta = tl.load(p_delta, mask=(range_t + tid * BLOCK_T) < c, other=0.)
-                l = tl.load(p_l, mask=(range_t + tid * BLOCK_T) < c, other=float('inf'))
-                qT_d1 = tl.load(p_qT_d1) # block1 x BLOCK_T
-                do = tl.load(p_do) # [BLOCK_T x BLOCK_E_VALID]
+                real_range_t = range_t + tid * BLOCK_T
+                p_m = M + real_range_t * stride_mt # [BLOCK_T]
+                p_delta = Delta + real_range_t * stride_dt # [BLOCK_T]
+                p_l = L + real_range_t * stride_lt # [BLOCK_T]
+                mask_t = real_range_t < c
+                rowmax = tl.load(p_m, mask=mask_t, other=float('inf'))
+                delta = tl.load(p_delta, mask=mask_t, other=0.)
+                l = tl.load(p_l, mask=mask_t, other=float('inf'))
+                qT_d1 = tl.load(p_qT_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+                do = tl.load(p_do, mask=mask_t[:, None], other=0.0) # [BLOCK_T x BLOCK_E_VALID]
             
-                q_d2_0 = tl.load(p_q_d2_0) # BLOCK_T
+                q_d2_0 = tl.load(p_q_d2_0, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_0 = qT_d1 * q_d2_0[None, :] # [block1 x BLOCK_T]
-                q_d2_1 = tl.load(p_q_d2_1) # BLOCK_T
+                q_d2_1 = tl.load(p_q_d2_1, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_1 = qT_d1 * q_d2_1[None, :] # [block1 x BLOCK_T]
-                q_d2_2 = tl.load(p_q_d2_2) # BLOCK_T
+                q_d2_2 = tl.load(p_q_d2_2, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_2 = qT_d1 * q_d2_2[None, :] # [block1 x BLOCK_T]
-                q_d2_3 = tl.load(p_q_d2_3) # BLOCK_T
+                q_d2_3 = tl.load(p_q_d2_3, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_3 = qT_d1 * q_d2_3[None, :] # [block1 x BLOCK_T]
-                q_d2_4 = tl.load(p_q_d2_4) # BLOCK_T
+                q_d2_4 = tl.load(p_q_d2_4, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_4 = qT_d1 * q_d2_4[None, :] # [block1 x BLOCK_T]
-                q_d2_5 = tl.load(p_q_d2_5) # BLOCK_T
+                q_d2_5 = tl.load(p_q_d2_5, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_5 = qT_d1 * q_d2_5[None, :] # [block1 x BLOCK_T]
-                q_d2_6 = tl.load(p_q_d2_6) # BLOCK_T
+                q_d2_6 = tl.load(p_q_d2_6, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_6 = qT_d1 * q_d2_6[None, :] # [block1 x BLOCK_T]
-                q_d2_7 = tl.load(p_q_d2_7) # BLOCK_T
+                q_d2_7 = tl.load(p_q_d2_7, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_7 = qT_d1 * q_d2_7[None, :] # [block1 x BLOCK_T]
-                q_d2_8 = tl.load(p_q_d2_8) # BLOCK_T
+                q_d2_8 = tl.load(p_q_d2_8, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_8 = qT_d1 * q_d2_8[None, :] # [block1 x BLOCK_T]
-                q_d2_9 = tl.load(p_q_d2_9) # BLOCK_T
+                q_d2_9 = tl.load(p_q_d2_9, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_9 = qT_d1 * q_d2_9[None, :] # [block1 x BLOCK_T]
-                q_d2_10 = tl.load(p_q_d2_10) # BLOCK_T
+                q_d2_10 = tl.load(p_q_d2_10, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_10 = qT_d1 * q_d2_10[None, :] # [block1 x BLOCK_T]
-                q_d2_11 = tl.load(p_q_d2_11) # BLOCK_T
+                q_d2_11 = tl.load(p_q_d2_11, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_11 = qT_d1 * q_d2_11[None, :] # [block1 x BLOCK_T]
-                q_d2_12 = tl.load(p_q_d2_12) # BLOCK_T
+                q_d2_12 = tl.load(p_q_d2_12, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_12 = qT_d1 * q_d2_12[None, :] # [block1 x BLOCK_T]
-                q_d2_13 = tl.load(p_q_d2_13) # BLOCK_T
+                q_d2_13 = tl.load(p_q_d2_13, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_13 = qT_d1 * q_d2_13[None, :] # [block1 x BLOCK_T]
-                q_d2_14 = tl.load(p_q_d2_14) # BLOCK_T
+                q_d2_14 = tl.load(p_q_d2_14, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_14 = qT_d1 * q_d2_14[None, :] # [block1 x BLOCK_T]
-                q_d2_15 = tl.load(p_q_d2_15) # BLOCK_T
+                q_d2_15 = tl.load(p_q_d2_15, mask=mask_t, other=0.0) # BLOCK_T
                 phiqT_15 = qT_d1 * q_d2_15[None, :] # [block1 x BLOCK_T]
                 alpha = tl.maximum(gamma, tl.exp(rowmax)) # [BLOCK_T]
                 factor = 1 / alpha / l # [BLOCK_T]

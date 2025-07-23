@@ -1,5 +1,6 @@
 import torch
 import pytest
+import gc
 from perf._checks import (
     check_tensor_property_pairs,
     check_inputs_created_determinstically,
@@ -13,6 +14,12 @@ from perf.tests.test_list import ATTENTION_TEST_CASES, UPDATE_STATE_TEST_CASES, 
 TEST_CASES = ATTENTION_TEST_CASES + UPDATE_STATE_TEST_CASES + DISCUMSUM_TEST_CASES + QUERY_STATE_TEST_CASES + POWER_FULL_TEST_CASES
 
 
+def cleanup():
+    gc.collect()
+    torch.cuda.empty_cache()
+    gc.collect()
+    torch.cuda.synchronize()
+
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_input_properties(fns_params):
@@ -23,6 +30,7 @@ def test_input_properties(fns_params):
         *[(inputs[k], desired_input_properties[k]) for k in desired_input_properties]
     )
     check_inputs_created_determinstically(fns['create_inputs'], params)
+    cleanup()
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_output_properties(fns_params):
@@ -35,6 +43,7 @@ def test_output_properties(fns_params):
     check_tensor_property_pairs(
         *zip(outputs, desired_output_properties.values())
     )
+    cleanup()
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_backward_properties(fns_params):
@@ -49,22 +58,26 @@ def test_backward_properties(fns_params):
     check_tensor_property_pairs(
         *[(inputs[k].grad, desired_input_properties[k]) for k in desired_input_properties if inputs[k].grad is not None]
     )
+    cleanup()
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_compiles_fwd(fns_params):
     fns, params = fns_params
     check_fn_compiles(fns['fn'], fns['create_inputs'](**params))
+    cleanup()
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_compiles_with_backward(fns_params):
     fns, params = fns_params
     check_fn_compiles_with_backward(fns['fn'], fns['create_inputs'](**params, requires_grad=True))
+    cleanup()
 
 @pytest.mark.skip(reason='Have not yet figured out how to make opcheck pass')
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_opcheck(fns_params):
     fns, params = fns_params
     torch.library.opcheck(fns['fn'], fns['create_inputs'](**params, requires_grad=True))
+    cleanup()
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_bwd_matches_autograd(fns_params):
@@ -77,6 +90,8 @@ def test_bwd_matches_autograd(fns_params):
         test_inputs=fns['create_inputs'](**params, requires_grad=True),
         rtol=4., # TODO(sean): this is pretty high, double check correctness
     )
+    cleanup()
+
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_fwd_matches_reference(fns_params):
@@ -93,6 +108,7 @@ def test_fwd_matches_reference(fns_params):
         rtol=4.0,
         atol=1e-3,
     )
+    cleanup()
 
 @pytest.mark.parametrize("fns_params", TEST_CASES)
 def test_bwd_matches_reference(fns_params):
@@ -109,3 +125,4 @@ def test_bwd_matches_reference(fns_params):
         rtol=4.0,
         atol=1e-3,
     )
+    cleanup()
