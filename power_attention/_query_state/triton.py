@@ -612,8 +612,7 @@ class _query_state(torch.autograd.Function):
         return dQ, dS, ds, dY_attn, dl_attn, None, None, None, None
 
 
-@torch.compile(fullgraph=True)
 def _query_state_fn(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state=True):
     return _query_state.apply(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state)
 
-query_state = _query_state_fn
+query_state = torch.compiler.disable(_query_state_fn)
