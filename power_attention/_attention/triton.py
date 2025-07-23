@@ -78,32 +78,6 @@ def keep(conf):
         return False
     return True
 
-def prune_configs(configs, nargs, **kwargs):
-    pruned_configs = []
-    for config in configs:
-        M_CTX = nargs["M_CTX"] if "M_CTX" in nargs else kwargs["M_CTX"]
-        N_CTX = nargs["N_CTX"] if "N_CTX" in nargs else kwargs["N_CTX"]
-        if config.kwargs["BM"] <= M_CTX and config.kwargs["BN"] <= N_CTX:
-            pruned_configs.append(config)
-            if os.environ.get("TRITON_NO_AUTOTUNE", "0") == "1":
-                return pruned_configs
-    if len(pruned_configs) == 0:
-        raise ValueError("No valid triton configs found for attention fwd")
-    return pruned_configs
-
-def prune_configs_bwd(configs, nargs, **kwargs):
-    pruned_configs = []
-    for config in configs:
-        M_CTX = nargs["M_CTX"] if "M_CTX" in nargs else kwargs["M_CTX"]
-        N_CTX = nargs["N_CTX"] if "N_CTX" in nargs else kwargs["N_CTX"]
-        if config.kwargs["BM1"] <= M_CTX and config.kwargs["BN1"] <= N_CTX and config.kwargs["BM2"] <= M_CTX and config.kwargs["BN2"] <= N_CTX:
-            pruned_configs.append(config)
-            if os.environ.get("TRITON_NO_AUTOTUNE", "0") == "1":
-                return pruned_configs
-    if len(pruned_configs) == 0:
-        raise ValueError("No valid triton configs found for attention bwd")
-    return pruned_configs
-
 @triton.jit
 def _power(a, deg: tl.constexpr):
     if deg == 1:
@@ -190,7 +164,7 @@ def _attn_fwd_inner(acc, l_i, m_i, q, gq, p_k, p_gk, p_v, #
     return acc, l_i, m_i
 
 
-@triton.autotune(list(filter(keep, fwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg", "norm"], prune_configs_by={'early_config_prune': prune_configs})
+@triton.autotune(list(filter(keep, fwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg", "norm"])
 @triton.jit
 def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, L, M, Out,  #
               stride_qb, stride_qh, stride_qm, stride_qd,  #
@@ -468,7 +442,7 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, dl_or_delta, #
     return dq, dgq
 
 
-@triton.autotune(list(filter(keep_bwd, bwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"], prune_configs_by={'early_config_prune': prune_configs_bwd})
+@triton.autotune(list(filter(keep_bwd, bwd_configs)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"])
 @triton.jit
 def _attn_bwd(Q, K, V, LOG_GQ, LOG_GK, M, Delta, DO, DL, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
               stride_qb, stride_qh, stride_qm, stride_qd, #
