@@ -61,7 +61,7 @@ def _query_state_fwd(Q, S, SK, Y_attn, L_attn, M, O, L,
                      stride_ob, stride_ot, stride_oh, stride_oe,
                      stride_lb, stride_lt, stride_lh,
                      n, h, c, d: tl.constexpr, D, e: tl.constexpr,
-                     zero_initial_state,
+                     zero_initial_state: tl.constexpr,
                      deg: tl.constexpr,
                      scale_p,
                      block1: tl.constexpr,
@@ -112,14 +112,14 @@ else:
 
 mask_T = range_t < c
 
-for m in range(0, d//block1):
-    p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
+for m_loop in range(0, d//block1):
+    p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
     q_d1 = tl.load(p_q_d1, mask=mask_T[:, None], other=0.) # BLOCK_T x block1
 
-    for n in range(0, (m+1)*block1//block2):
-        off_d2 = n*block2
+    for n_loop in range(0, (m_loop+1)*block1//block2):
+        off_d2 = n_loop*block2
         off_d2 = tl.multiple_of(off_d2, block2)
-        off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+        off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
         {% for i in range(block2) -%}
         p_q_d2_{{i}} = Q + range_t[:] * stride_qt + (off_d2 + {{i}}) * stride_qd # BLOCK_T
         p_s_{{i}} = S + (range_d1[:, None] + off_D + {{i}} * block1) * stride_sD + range_e[None, :] * stride_se # block1 x BLOCK_E_VALID
@@ -262,15 +262,15 @@ delta = delta * qs_factor # BLOCK_T
 dq_{{j}} = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
 {% endfor -%}
 
-for m in range(0, d//block1):
-    p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+for m_loop in range(0, d//block1):
+    p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
     q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
     dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
 
-    for n in range(0, (m+1)*block1//block2):
-        off_d2 = n*block2
+    for n_loop in range(0, (m_loop+1)*block1//block2):
+        off_d2 = n_loop*block2
         off_d2 = tl.multiple_of(off_d2, block2)
-        off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+        off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
         {% for i in range(block2) %}
         p_q_d2_{{i}} = Q + range_t[:] * stride_qt + (off_d2 + {{i}}) * stride_qd # [BLOCK_T]
         p_sT_{{i}} = S + (range_d1[None, :] + off_D + {{i}} * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -285,10 +285,10 @@ for m in range(0, d//block1):
 
         {% for i in range(block2) %}
         dpq_{{i}} = tl.dot(do, sT_{{i}}) - delta[:, None] * sk_{{i}}[None, :] # [BLOCK_T x block1]
-        if m == 0:
+        if m_loop == 0:
             dq_0 += dpq_{{i}} * q_d2_{{i}}[:, None]
         {% for j in range(1, d//block1 - 1) -%}
-        elif m == {{j}}:
+        elif m_loop == {{j}}:
             dq_{{j}} += dpq_{{i}} * q_d2_{{i}}[:, None]
         {% endfor -%}
         else:
@@ -612,7 +612,8 @@ class _query_state(torch.autograd.Function):
         return dQ, dS, ds, dY_attn, dl_attn, None, None, None, None
 
 
+@torch.compile(fullgraph=True)
 def _query_state_fn(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state=True):
     return _query_state.apply(Q, S, s, Y_attn, l_attn, rowmax, deg, scale, zero_initial_state)
 
-query_state = torch.compiler.disable(_query_state_fn)
+query_state = _query_state_fn

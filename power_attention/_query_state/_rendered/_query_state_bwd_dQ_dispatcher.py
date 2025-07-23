@@ -77,15 +77,15 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-            for m in range(0, d//block1):
-                p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+            for m_loop in range(0, d//block1):
+                p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
                 q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
                 dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             
-                for n in range(0, (m+1)*block1//block2):
-                    off_d2 = n*block2
+                for n_loop in range(0, (m_loop+1)*block1//block2):
+                    off_d2 = n_loop*block2
                     off_d2 = tl.multiple_of(off_d2, block2)
-                    off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                    off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -95,7 +95,7 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
                     sk_0 = tl.load(p_sk_0) # [block1]
                     
                     dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_1 += dpq_0 * q_d2_0[:, None]
@@ -172,15 +172,15 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_2 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_3 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-            for m in range(0, d//block1):
-                p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+            for m_loop in range(0, d//block1):
+                p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
                 q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
                 dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             
-                for n in range(0, (m+1)*block1//block2):
-                    off_d2 = n*block2
+                for n_loop in range(0, (m_loop+1)*block1//block2):
+                    off_d2 = n_loop*block2
                     off_d2 = tl.multiple_of(off_d2, block2)
-                    off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                    off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -190,11 +190,11 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
                     sk_0 = tl.load(p_sk_0) # [block1]
                     
                     dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
-                    elif m == 1:
+                    elif m_loop == 1:
                         dq_1 += dpq_0 * q_d2_0[:, None]
-                    elif m == 2:
+                    elif m_loop == 2:
                         dq_2 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_3 += dpq_0 * q_d2_0[:, None]
@@ -285,15 +285,15 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             dq_5 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_6 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_7 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-            for m in range(0, d//block1):
-                p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+            for m_loop in range(0, d//block1):
+                p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
                 q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
                 dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             
-                for n in range(0, (m+1)*block1//block2):
-                    off_d2 = n*block2
+                for n_loop in range(0, (m_loop+1)*block1//block2):
+                    off_d2 = n_loop*block2
                     off_d2 = tl.multiple_of(off_d2, block2)
-                    off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                    off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -303,19 +303,19 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
                     sk_0 = tl.load(p_sk_0) # [block1]
                     
                     dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
-                    elif m == 1:
+                    elif m_loop == 1:
                         dq_1 += dpq_0 * q_d2_0[:, None]
-                    elif m == 2:
+                    elif m_loop == 2:
                         dq_2 += dpq_0 * q_d2_0[:, None]
-                    elif m == 3:
+                    elif m_loop == 3:
                         dq_3 += dpq_0 * q_d2_0[:, None]
-                    elif m == 4:
+                    elif m_loop == 4:
                         dq_4 += dpq_0 * q_d2_0[:, None]
-                    elif m == 5:
+                    elif m_loop == 5:
                         dq_5 += dpq_0 * q_d2_0[:, None]
-                    elif m == 6:
+                    elif m_loop == 6:
                         dq_6 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_7 += dpq_0 * q_d2_0[:, None]
@@ -421,15 +421,15 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             
             dq_0 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-            for m in range(0, d//block1):
-                p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+            for m_loop in range(0, d//block1):
+                p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
                 q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
                 dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             
-                for n in range(0, (m+1)*block1//block2):
-                    off_d2 = n*block2
+                for n_loop in range(0, (m_loop+1)*block1//block2):
+                    off_d2 = n_loop*block2
                     off_d2 = tl.multiple_of(off_d2, block2)
-                    off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                    off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -446,13 +446,13 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
                     sk_1 = tl.load(p_sk_1) # [block1]
                     
                     dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_1 += dpq_0 * q_d2_0[:, None]
                     
                     dpq_1 = tl.dot(do, sT_1) - delta[:, None] * sk_1[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_1 * q_d2_1[:, None]
                     else:
                         dq_1 += dpq_1 * q_d2_1[:, None]
@@ -537,15 +537,15 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             dq_1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_2 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_3 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-            for m in range(0, d//block1):
-                p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+            for m_loop in range(0, d//block1):
+                p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
                 q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
                 dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             
-                for n in range(0, (m+1)*block1//block2):
-                    off_d2 = n*block2
+                for n_loop in range(0, (m_loop+1)*block1//block2):
+                    off_d2 = n_loop*block2
                     off_d2 = tl.multiple_of(off_d2, block2)
-                    off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                    off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -562,21 +562,21 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
                     sk_1 = tl.load(p_sk_1) # [block1]
                     
                     dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
-                    elif m == 1:
+                    elif m_loop == 1:
                         dq_1 += dpq_0 * q_d2_0[:, None]
-                    elif m == 2:
+                    elif m_loop == 2:
                         dq_2 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_3 += dpq_0 * q_d2_0[:, None]
                     
                     dpq_1 = tl.dot(do, sT_1) - delta[:, None] * sk_1[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_1 * q_d2_1[:, None]
-                    elif m == 1:
+                    elif m_loop == 1:
                         dq_1 += dpq_1 * q_d2_1[:, None]
-                    elif m == 2:
+                    elif m_loop == 2:
                         dq_2 += dpq_1 * q_d2_1[:, None]
                     else:
                         dq_3 += dpq_1 * q_d2_1[:, None]
@@ -681,15 +681,15 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
             dq_5 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_6 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             dq_7 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
-            for m in range(0, d//block1):
-                p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
+            for m_loop in range(0, d//block1):
+                p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # [BLOCK_T x block1]
                 q_d1 = tl.load(p_q_d1, mask=(range_t < c)[:, None], other=0.) # [BLOCK_T x block1]
                 dq_d1 = tl.zeros((BLOCK_T, block1), dtype=tl.float32)
             
-                for n in range(0, (m+1)*block1//block2):
-                    off_d2 = n*block2
+                for n_loop in range(0, (m_loop+1)*block1//block2):
+                    off_d2 = n_loop*block2
                     off_d2 = tl.multiple_of(off_d2, block2)
-                    off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                    off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                     
                     p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # [BLOCK_T]
                     p_sT_0 = S + (range_d1[None, :] + off_D + 0 * block1) * stride_sD + range_e[:, None] * stride_se # [BLOCK_E_VALID x block1]
@@ -706,37 +706,37 @@ def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
                     sk_1 = tl.load(p_sk_1) # [block1]
                     
                     dpq_0 = tl.dot(do, sT_0) - delta[:, None] * sk_0[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_0 * q_d2_0[:, None]
-                    elif m == 1:
+                    elif m_loop == 1:
                         dq_1 += dpq_0 * q_d2_0[:, None]
-                    elif m == 2:
+                    elif m_loop == 2:
                         dq_2 += dpq_0 * q_d2_0[:, None]
-                    elif m == 3:
+                    elif m_loop == 3:
                         dq_3 += dpq_0 * q_d2_0[:, None]
-                    elif m == 4:
+                    elif m_loop == 4:
                         dq_4 += dpq_0 * q_d2_0[:, None]
-                    elif m == 5:
+                    elif m_loop == 5:
                         dq_5 += dpq_0 * q_d2_0[:, None]
-                    elif m == 6:
+                    elif m_loop == 6:
                         dq_6 += dpq_0 * q_d2_0[:, None]
                     else:
                         dq_7 += dpq_0 * q_d2_0[:, None]
                     
                     dpq_1 = tl.dot(do, sT_1) - delta[:, None] * sk_1[None, :] # [BLOCK_T x block1]
-                    if m == 0:
+                    if m_loop == 0:
                         dq_0 += dpq_1 * q_d2_1[:, None]
-                    elif m == 1:
+                    elif m_loop == 1:
                         dq_1 += dpq_1 * q_d2_1[:, None]
-                    elif m == 2:
+                    elif m_loop == 2:
                         dq_2 += dpq_1 * q_d2_1[:, None]
-                    elif m == 3:
+                    elif m_loop == 3:
                         dq_3 += dpq_1 * q_d2_1[:, None]
-                    elif m == 4:
+                    elif m_loop == 4:
                         dq_4 += dpq_1 * q_d2_1[:, None]
-                    elif m == 5:
+                    elif m_loop == 5:
                         dq_5 += dpq_1 * q_d2_1[:, None]
-                    elif m == 6:
+                    elif m_loop == 6:
                         dq_6 += dpq_1 * q_d2_1[:, None]
                     else:
                         dq_7 += dpq_1 * q_d2_1[:, None]

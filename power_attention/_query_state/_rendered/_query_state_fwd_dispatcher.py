@@ -11,7 +11,7 @@ def _query_state_fwd(Q, S, SK, Y_attn, L_attn, M, O, L,
                      stride_ob, stride_ot, stride_oh, stride_oe,
                      stride_lb, stride_lt, stride_lh,
                      n, h, c, d: tl.constexpr, D, e: tl.constexpr,
-                     zero_initial_state,
+                     zero_initial_state: tl.constexpr,
                      deg: tl.constexpr,
                      scale_p,
                      block1: tl.constexpr,
@@ -52,14 +52,14 @@ def _query_state_fwd(Q, S, SK, Y_attn, L_attn, M, O, L,
         
         mask_T = range_t < c
         
-        for m in range(0, d//block1):
-            p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
+        for m_loop in range(0, d//block1):
+            p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
             q_d1 = tl.load(p_q_d1, mask=mask_T[:, None], other=0.) # BLOCK_T x block1
         
-            for n in range(0, (m+1)*block1//block2):
-                off_d2 = n*block2
+            for n_loop in range(0, (m_loop+1)*block1//block2):
+                off_d2 = n_loop*block2
                 off_d2 = tl.multiple_of(off_d2, block2)
-                off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                 p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # BLOCK_T
                 p_s_0 = S + (range_d1[:, None] + off_D + 0 * block1) * stride_sD + range_e[None, :] * stride_se # block1 x BLOCK_E_VALID
                 p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD
@@ -127,14 +127,14 @@ def _query_state_fwd(Q, S, SK, Y_attn, L_attn, M, O, L,
         
         mask_T = range_t < c
         
-        for m in range(0, d//block1):
-            p_q_d1 = Q + range_t[:, None] * stride_qt + (m*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
+        for m_loop in range(0, d//block1):
+            p_q_d1 = Q + range_t[:, None] * stride_qt + (m_loop*block1 + range_d1[None, :]) * stride_qd # BLOCK_T x block1
             q_d1 = tl.load(p_q_d1, mask=mask_T[:, None], other=0.) # BLOCK_T x block1
         
-            for n in range(0, (m+1)*block1//block2):
-                off_d2 = n*block2
+            for n_loop in range(0, (m_loop+1)*block1//block2):
+                off_d2 = n_loop*block2
                 off_d2 = tl.multiple_of(off_d2, block2)
-                off_D = (m*(1+m)//2)*block1*block1 + off_d2*block1
+                off_D = (m_loop*(1+m_loop)//2)*block1*block1 + off_d2*block1
                 p_q_d2_0 = Q + range_t[:] * stride_qt + (off_d2 + 0) * stride_qd # BLOCK_T
                 p_s_0 = S + (range_d1[:, None] + off_D + 0 * block1) * stride_sD + range_e[None, :] * stride_se # block1 x BLOCK_E_VALID
                 p_sk_0 = SK + (range_d1 + off_D + 0 * block1) * stride_skD
