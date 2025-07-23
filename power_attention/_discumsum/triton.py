@@ -1,7 +1,10 @@
 import torch
 import triton
 import triton.language as tl
+import logging
 from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def prune_configs_by_size(configs, nargs, **kwargs):
@@ -84,6 +87,16 @@ def discumsum_fwd_kernel(
         tl.store(Y_ptrs, state.to(Y_ptr.dtype.element_ty), mask=d_mask)
 
 
+
+@triton.autotune(
+    configs=[
+        triton.Config({'BLOCK_D': 64}, num_warps=2),
+        triton.Config({'BLOCK_D': 128}, num_warps=4),
+        triton.Config({'BLOCK_D': 256}, num_warps=8),
+        triton.Config({'BLOCK_D': 512}, num_warps=8),
+    ],
+    key=['D'],
+)
 @triton.jit
 def discumsum_bwd_kernel(
     dY_ptr, Y_ptr, log_G_ptr, dX_ptr, dG_ptr,
@@ -102,13 +115,10 @@ def discumsum_bwd_kernel(
     dX[t] = dstate
     dlog_G[t] = sum_over_d(Y[t] * dstate * exp(log_G[t]))
     """
-    # Get program IDs - process all features in one block per (batch, head)
+    # Get program IDs
     pid_b = tl.program_id(axis=0)
     pid_h = tl.program_id(axis=1)
     
-    # Process all features in this kernel
-    d_offset = tl.arange(0, BLOCK_D)
-    d_mask = d_offset < D
     
     # Base pointers for this batch and head
     dY_base = dY_ptr + pid_b * stride_dY_b + pid_h * stride_dY_h
@@ -122,32 +132,37 @@ def discumsum_bwd_kernel(
     
     # Process in reverse time order
     for t in range(T - 1, -1, -1):
-        # Load dY[t+1]
-        dY_ptrs = dY_base + (t + 1) * stride_dY_t + d_offset * stride_dY_d
-        dy = tl.load(dY_ptrs, mask=d_mask, other=0.0).to(tl.float32)
-        
-        # Load log_G[t] and compute exp(log_G[t])
-        G_ptr = G_base + t * stride_G_t
-        log_g = tl.load(G_ptr)
-        g = tl.exp(log_g)
-        
-        # Update dstate: dstate = dstate * g + dY[t+1]
-        dstate = dstate * g + dy
-        
-        # Store dX[t] = dstate
-        dX_ptrs = dX_base + t * stride_dX_t + d_offset * stride_dX_d
-        tl.store(dX_ptrs, dstate.to(dX_ptr.dtype.element_ty), mask=d_mask)
-        
-        # Compute gradient w.r.t. log_G
-        # Load Y[t] for gradient computation
-        Y_ptrs = Y_base + t * stride_Y_t + d_offset * stride_Y_d
-        y = tl.load(Y_ptrs, mask=d_mask, other=0.0).to(tl.float32)
-        
-        # Compute dlog_G contribution: Y[t] * dstate * exp(log_G[t])
-        dg_local = y * dstate * g
-        dg_sum = tl.sum(dg_local, axis=0)
-        
-        # Store directly (no atomic needed since only one block per (b,h))
+        dg_sum = tl.zeros((1,), dtype=tl.float32)
+        for d_idx in range(0, tl.cdiv(D, BLOCK_D)):
+            # Compute offsets
+            d_offset = d_idx * BLOCK_D + tl.arange(0, BLOCK_D)
+            d_mask = d_offset < D
+            # Load dY[t+1]
+            dY_ptrs = dY_base + (t + 1) * stride_dY_t + d_offset * stride_dY_d
+            dy = tl.load(dY_ptrs, mask=d_mask, other=0.0).to(tl.float32)
+            
+            # Load log_G[t] and compute exp(log_G[t])
+            G_ptr = G_base + t * stride_G_t
+            log_g = tl.load(G_ptr)
+            g = tl.exp(log_g)
+            
+            # Update dstate: dstate = dstate * g + dY[t+1]
+            dstate = dstate * g + dy
+            
+            # Store dX[t] = dstate
+            dX_ptrs = dX_base + t * stride_dX_t + d_offset * stride_dX_d
+            tl.store(dX_ptrs, dstate.to(dX_ptr.dtype.element_ty), mask=d_mask)
+            
+            # Compute dlog_G[t] = sum_over_d(Y[t] * dstate * g)
+            Y_ptrs = Y_base + t * stride_Y_t + d_offset * stride_Y_d
+            y = tl.load(Y_ptrs, mask=d_mask, other=0.0).to(tl.float32)
+            
+            # Compute gradient w.r.t. log_G
+            # Each feature block contributes to the same dlog_G[t]
+            dg_local = y * dstate * g
+            dg_sum += tl.sum(dg_local, axis=0)
+            
+        # All feature blocks contribute to the same dlog_G[t]
         dG_ptr = dG_base + t * stride_dG_t
         tl.store(dG_ptr, dg_sum)
 
@@ -169,9 +184,7 @@ def discumsum_fwd_triton(X: torch.Tensor, log_G: torch.Tensor) -> torch.Tensor:
     # Create output tensor with +1 time dimension
     Y = torch.empty(B, T + 1, H, D, dtype=X.dtype, device=X.device)
     
-    # Grid configuration: one block per (batch, head, feature_block)
-    num_D_blocks = triton.cdiv(D, 64)  # Start with 64 as minimum block size
-    grid = (B, H, num_D_blocks)
+    grid = lambda args: (B, H, triton.cdiv(D, args["BLOCK_D"]))
     
     # Launch kernel
     discumsum_fwd_kernel[grid](
@@ -210,13 +223,9 @@ def discumsum_bwd_triton(
     # Create output tensors
     dX = torch.empty(B, T, H, D, dtype=dY.dtype, device=dY.device)
     dlog_G = torch.zeros(B, T, H, dtype=torch.float32, device=dY.device)
-
-    # Use power-of-2 block size that covers all features
-    BLOCK_D = triton.next_power_of_2(D)
     
-    # Grid: one block per (batch, head) - no feature blocking
     grid = (B, H)
-    
+    logger.debug('Run discumsum backward')
     # Launch kernel
     discumsum_bwd_kernel[grid](
         dY, Y, log_G, dX, dlog_G,
@@ -226,9 +235,8 @@ def discumsum_bwd_triton(
         log_G.stride(0), log_G.stride(1), log_G.stride(2),
         dX.stride(0), dX.stride(1), dX.stride(2), dX.stride(3),
         dlog_G.stride(0), dlog_G.stride(1), dlog_G.stride(2),
-        BLOCK_D=BLOCK_D,
     )
-    
+    logger.debug('Discumsum backward done')
     return dX, dlog_G
 
 
