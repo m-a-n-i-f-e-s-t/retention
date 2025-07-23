@@ -210,9 +210,9 @@ def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, L, M, Out,  #
     l_i = tl.zeros([BM], dtype=tl.float32) + 1.0
     acc = tl.zeros([BM, DIM_VO], dtype=tl.float32)
 
-    q = tl.load(p_q, cache_modifier=".cg")
+    q = tl.load(p_q, cache_modifier=".cg", boundary_check=(0, 1), padding_option="zero")
     if gating:
-        gq = tl.load(p_gq, cache_modifier=".cg")
+        gq = tl.load(p_gq, cache_modifier=".cg", boundary_check=(0,), padding_option="zero")
     else:
         gq = None
 
