@@ -16,20 +16,24 @@ if __name__ == '__main__':
     # Create inputs
     t = 1024
     chunk_size=128
-    b = 8
-    h = 16
+    b = 2
+    h = 2
     d = 64
     deg = 2
     gating = True
-    dtype = torch.float16
+    dtype = torch.bfloat16
+    compile = True
     inputs = create_inputs(b=b, t=t, h=h, d=d, dtype=dtype, device='cuda', gating=gating, chunk_size=chunk_size, deg=deg, requires_grad=True)
     
     import sys
 
-    if len(sys.argv) > 1 and sys.argv[1] == 'profile':
-        O = power_full(**inputs)
-        torch.autograd.backward((O,), grad_tensors=(O,))
-    else:
+    if compile:
+        power_full = torch.compile(power_full)
+
+    O = power_full(**inputs)
+    torch.autograd.backward((O,), grad_tensors=(O,))
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'benchmark':
         # Benchmark
         print(f"Benchmarking power_full {b=} {t=} {h=} {d=} {chunk_size=} {deg=} {gating=} {dtype=}")
 

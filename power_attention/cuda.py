@@ -26,10 +26,10 @@ if __name__ == '__main__':
     
     import sys
 
-    if len(sys.argv) > 1 and sys.argv[1] == 'profile':
-        O = power_full(**inputs)
-        torch.autograd.backward((O,), grad_tensors=(O,))
-    else:
+    O = power_full(**inputs)
+    torch.autograd.backward((O,), grad_tensors=(O,))
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'benchmark':
         # Benchmark
         print(f"Benchmarking power_full {b=} {t=} {h=} {d=} {chunk_size=} {deg=} {gating=} {dtype=}")
 
