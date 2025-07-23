@@ -251,6 +251,7 @@ def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, L, M, Out,  #
                                    M_CTX, N_CTX, 2, use_log2)
         
     # epilogue
+    l_i = l_i + 1e-6
     if norm: # normalize by temporal norm and fuse norm into rowmax
         if use_log2:
             m_i += tl.log2(l_i)

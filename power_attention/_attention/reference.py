@@ -48,10 +48,10 @@ def attention(Q, K, V, log_G, deg, r=1, w=1, causal=True, head_first=False, scal
         p = exp(s - rowmax).to(V.dtype)
     else:
         p = exp(s - rowmax).to(V.dtype) * signs
-    l = torch.sum(p, dim=-1)
+    l = torch.sum(p, dim=-1).to(torch.float32) + 1e-6
     o = torch.matmul(p, V)
     if norm:
-        o = o / l[..., None]
+        o = (o / l[..., None]).to(V.dtype)
     if not head_first:
         o = o.transpose(1, 2)
         rowmax = rowmax.transpose(1, 2)
@@ -59,7 +59,7 @@ def attention(Q, K, V, log_G, deg, r=1, w=1, causal=True, head_first=False, scal
     if norm:
         return o
     else:
-        return o, l, rowmax.squeeze(-1)
+        return o, l, rowmax.squeeze(-1).to(torch.float32)
 
 
 attention_fwd = attention
