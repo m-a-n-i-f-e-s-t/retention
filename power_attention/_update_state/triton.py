@@ -104,10 +104,10 @@ n_{{i}} = tl.zeros((block1,), dtype=tl.float32)
 {% endfor -%}
 
 for tid in range(0, tl.cdiv(T, BLOCK_T)):
-    k_d1 = tl.load(p_k_d1) # block1 x BLOCK_T
-    v = tl.load(p_v)
+    k_d1 = tl.load(p_k_d1, mask=(range_t < T)[None, :], other=0.0) # block1 x BLOCK_T
+    v = tl.load(p_v, mask=(range_t < T)[:, None], other=0.0)
     {% for i in range(block2) -%}
-    k_d2_{{i}} = tl.load(p_k_d2_{{i}}) * multiplier # BLOCK_T
+    k_d2_{{i}} = tl.load(p_k_d2_{{i}}, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
     phik_{{i}} = k_d1 * k_d2_{{i}}
     n_{{i}} += tl.sum(phik_{{i}}, 1) # block1
     {% endfor -%}
@@ -118,6 +118,7 @@ for tid in range(0, tl.cdiv(T, BLOCK_T)):
     p_k_d1 += BLOCK_T * stride_kt
     {% for i in range(block2) -%}
     p_k_d2_{{i}} += BLOCK_T * stride_kt
+    range_t += BLOCK_T
     {% endfor %}
 
 {% for i in range(block2) -%}
