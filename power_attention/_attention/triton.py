@@ -87,6 +87,8 @@ def prune_configs(configs, nargs, **kwargs):
             pruned_configs.append(config)
             if os.environ.get("TRITON_NO_AUTOTUNE", "0") == "1":
                 return pruned_configs
+    if len(pruned_configs) == 0:
+        raise ValueError("No valid triton configs found for attention fwd")
     return pruned_configs
 
 def prune_configs_bwd(configs, nargs, **kwargs):
@@ -98,6 +100,8 @@ def prune_configs_bwd(configs, nargs, **kwargs):
             pruned_configs.append(config)
             if os.environ.get("TRITON_NO_AUTOTUNE", "0") == "1":
                 return pruned_configs
+    if len(pruned_configs) == 0:
+        raise ValueError("No valid triton configs found for attention bwd")
     return pruned_configs
 
 @triton.jit

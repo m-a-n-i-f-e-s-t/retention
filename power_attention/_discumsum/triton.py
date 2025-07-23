@@ -27,7 +27,7 @@ fwd_configs = [
 
 @triton.autotune(
     configs=fwd_configs,
-    key=['D', 'T'],
+    key=['D'],
     prune_configs_by={'early_config_prune': prune_configs_by_size},
 )
 @triton.jit
@@ -93,7 +93,7 @@ bwd_configs = [
 
 @triton.autotune(
     configs=bwd_configs,
-    key=['D', 'T'],
+    key=['D'],
     reset_to_zero=['dG_ptr'],
     prune_configs_by={'early_config_prune': prune_configs_by_size},
 )
