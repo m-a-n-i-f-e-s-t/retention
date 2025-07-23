@@ -57,30 +57,31 @@ def _update_state_fwd(K, V, S, N, deg: tl.constexpr,
         s_7 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         n_7 = tl.zeros((block1,), dtype=tl.float32)
         for tid in range(0, tl.cdiv(T, BLOCK_T)):
-            k_d1 = tl.load(p_k_d1, mask=(range_t < T)[None, :], other=0.0) # block1 x BLOCK_T
-            v = tl.load(p_v, mask=(range_t < T)[:, None], other=0.0)
-            k_d2_0 = tl.load(p_k_d2_0, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            mask_t = range_t + tid * BLOCK_T < T
+            k_d1 = tl.load(p_k_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+            v = tl.load(p_v, mask=mask_t[:, None], other=0.0)
+            k_d2_0 = tl.load(p_k_d2_0, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_0 = k_d1 * k_d2_0
             n_0 += tl.sum(phik_0, 1) # block1
-            k_d2_1 = tl.load(p_k_d2_1, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_1 = tl.load(p_k_d2_1, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_1 = k_d1 * k_d2_1
             n_1 += tl.sum(phik_1, 1) # block1
-            k_d2_2 = tl.load(p_k_d2_2, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_2 = tl.load(p_k_d2_2, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_2 = k_d1 * k_d2_2
             n_2 += tl.sum(phik_2, 1) # block1
-            k_d2_3 = tl.load(p_k_d2_3, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_3 = tl.load(p_k_d2_3, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_3 = k_d1 * k_d2_3
             n_3 += tl.sum(phik_3, 1) # block1
-            k_d2_4 = tl.load(p_k_d2_4, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_4 = tl.load(p_k_d2_4, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_4 = k_d1 * k_d2_4
             n_4 += tl.sum(phik_4, 1) # block1
-            k_d2_5 = tl.load(p_k_d2_5, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_5 = tl.load(p_k_d2_5, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_5 = k_d1 * k_d2_5
             n_5 += tl.sum(phik_5, 1) # block1
-            k_d2_6 = tl.load(p_k_d2_6, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_6 = tl.load(p_k_d2_6, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_6 = k_d1 * k_d2_6
             n_6 += tl.sum(phik_6, 1) # block1
-            k_d2_7 = tl.load(p_k_d2_7, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_7 = tl.load(p_k_d2_7, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_7 = k_d1 * k_d2_7
             n_7 += tl.sum(phik_7, 1) # block1
             s_0 = tl.dot(phik_0.to(K.dtype.element_ty), v, s_0)
@@ -94,21 +95,13 @@ def _update_state_fwd(K, V, S, N, deg: tl.constexpr,
             p_v += BLOCK_T * stride_vt
             p_k_d1 += BLOCK_T * stride_kt
             p_k_d2_0 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_1 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_2 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_3 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_4 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_5 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_6 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_7 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             
         
         range_d2_0 = tl.arange(0, block1).to(tl.int64) + 0 * block1
@@ -223,54 +216,55 @@ def _update_state_fwd(K, V, S, N, deg: tl.constexpr,
         s_15 = tl.zeros((block1, BLOCK_E_VALID), dtype=tl.float32)
         n_15 = tl.zeros((block1,), dtype=tl.float32)
         for tid in range(0, tl.cdiv(T, BLOCK_T)):
-            k_d1 = tl.load(p_k_d1, mask=(range_t < T)[None, :], other=0.0) # block1 x BLOCK_T
-            v = tl.load(p_v, mask=(range_t < T)[:, None], other=0.0)
-            k_d2_0 = tl.load(p_k_d2_0, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            mask_t = range_t + tid * BLOCK_T < T
+            k_d1 = tl.load(p_k_d1, mask=mask_t[None, :], other=0.0) # block1 x BLOCK_T
+            v = tl.load(p_v, mask=mask_t[:, None], other=0.0)
+            k_d2_0 = tl.load(p_k_d2_0, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_0 = k_d1 * k_d2_0
             n_0 += tl.sum(phik_0, 1) # block1
-            k_d2_1 = tl.load(p_k_d2_1, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_1 = tl.load(p_k_d2_1, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_1 = k_d1 * k_d2_1
             n_1 += tl.sum(phik_1, 1) # block1
-            k_d2_2 = tl.load(p_k_d2_2, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_2 = tl.load(p_k_d2_2, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_2 = k_d1 * k_d2_2
             n_2 += tl.sum(phik_2, 1) # block1
-            k_d2_3 = tl.load(p_k_d2_3, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_3 = tl.load(p_k_d2_3, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_3 = k_d1 * k_d2_3
             n_3 += tl.sum(phik_3, 1) # block1
-            k_d2_4 = tl.load(p_k_d2_4, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_4 = tl.load(p_k_d2_4, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_4 = k_d1 * k_d2_4
             n_4 += tl.sum(phik_4, 1) # block1
-            k_d2_5 = tl.load(p_k_d2_5, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_5 = tl.load(p_k_d2_5, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_5 = k_d1 * k_d2_5
             n_5 += tl.sum(phik_5, 1) # block1
-            k_d2_6 = tl.load(p_k_d2_6, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_6 = tl.load(p_k_d2_6, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_6 = k_d1 * k_d2_6
             n_6 += tl.sum(phik_6, 1) # block1
-            k_d2_7 = tl.load(p_k_d2_7, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_7 = tl.load(p_k_d2_7, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_7 = k_d1 * k_d2_7
             n_7 += tl.sum(phik_7, 1) # block1
-            k_d2_8 = tl.load(p_k_d2_8, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_8 = tl.load(p_k_d2_8, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_8 = k_d1 * k_d2_8
             n_8 += tl.sum(phik_8, 1) # block1
-            k_d2_9 = tl.load(p_k_d2_9, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_9 = tl.load(p_k_d2_9, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_9 = k_d1 * k_d2_9
             n_9 += tl.sum(phik_9, 1) # block1
-            k_d2_10 = tl.load(p_k_d2_10, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_10 = tl.load(p_k_d2_10, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_10 = k_d1 * k_d2_10
             n_10 += tl.sum(phik_10, 1) # block1
-            k_d2_11 = tl.load(p_k_d2_11, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_11 = tl.load(p_k_d2_11, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_11 = k_d1 * k_d2_11
             n_11 += tl.sum(phik_11, 1) # block1
-            k_d2_12 = tl.load(p_k_d2_12, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_12 = tl.load(p_k_d2_12, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_12 = k_d1 * k_d2_12
             n_12 += tl.sum(phik_12, 1) # block1
-            k_d2_13 = tl.load(p_k_d2_13, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_13 = tl.load(p_k_d2_13, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_13 = k_d1 * k_d2_13
             n_13 += tl.sum(phik_13, 1) # block1
-            k_d2_14 = tl.load(p_k_d2_14, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_14 = tl.load(p_k_d2_14, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_14 = k_d1 * k_d2_14
             n_14 += tl.sum(phik_14, 1) # block1
-            k_d2_15 = tl.load(p_k_d2_15, mask=(range_t < T), other=0.0) * multiplier # BLOCK_T
+            k_d2_15 = tl.load(p_k_d2_15, mask=mask_t, other=0.0) * multiplier # BLOCK_T
             phik_15 = k_d1 * k_d2_15
             n_15 += tl.sum(phik_15, 1) # block1
             s_0 = tl.dot(phik_0.to(K.dtype.element_ty), v, s_0)
@@ -292,37 +286,21 @@ def _update_state_fwd(K, V, S, N, deg: tl.constexpr,
             p_v += BLOCK_T * stride_vt
             p_k_d1 += BLOCK_T * stride_kt
             p_k_d2_0 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_1 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_2 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_3 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_4 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_5 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_6 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_7 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_8 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_9 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_10 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_11 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_12 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_13 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_14 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             p_k_d2_15 += BLOCK_T * stride_kt
-            range_t += BLOCK_T
             
         
         range_d2_0 = tl.arange(0, block1).to(tl.int64) + 0 * block1
