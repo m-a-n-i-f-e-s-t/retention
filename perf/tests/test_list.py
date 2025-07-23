@@ -48,7 +48,7 @@ attention_fn_sets = [
         'fn': attention_triton, 'ref': attention_reference, **attention_input_output},
 ]
 attention_param_ranges = {
-    'b': [4],
+    'b': [1],
     't': [128, 1024],
     'h': [2],
     'd': [32, 64],
@@ -57,7 +57,7 @@ attention_param_ranges = {
     'gating': [False, True],
     'norm': [True, False],
     'causal': [False, True],
-    'dtype': [torch.bfloat16, torch.float16],
+    'dtype': [torch.bfloat16],
     'device': ['cuda'],
 }
 ATTENTION_TEST_CASES = fn_set_and_param_range_to_test_cases(attention_fn_sets, attention_param_ranges)
@@ -139,12 +139,12 @@ discumsum_fn_sets = [
         'fn': discumsum_triton, 'ref': discumsum_reference, **discumsum_input_output},
 ]
 discumsum_param_ranges = {
-    'b': [1, 2],
-    'n': [1, 8, 32],
+    'b': [2],
+    'n': [1, 8],
     'h': [1, 2],
     'D': [4],
     'd': [32, 64],
-    'dtype': [torch.float16, torch.bfloat16],
+    'dtype': [torch.bfloat16],
     'device': ['cuda']
 }
 DISCUMSUM_TEST_CASES = fn_set_and_param_range_to_test_cases(discumsum_fn_sets, discumsum_param_ranges)

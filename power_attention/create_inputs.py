@@ -17,7 +17,7 @@ def create_inputs(b=2, t=1024, h=8, d=32, qhead_ratio=1, dtype=torch.float16, de
     initial_state = None
     if requires_grad:
         Q, K, V, log_G, initial_state = tree_map(
-            lambda x: x.requires_grad_(True) if x is not None else None, (Q, K, V, log_G, initial_state))
+            lambda x: x.clone().detach().requires_grad_(True) if x is not None else None, (Q, K, V, log_G, initial_state))
     return dict(Q=Q, K=K, V=V, log_G=log_G, 
                 initial_state=initial_state,
                 return_final_state=False,

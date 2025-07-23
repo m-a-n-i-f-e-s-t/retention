@@ -224,7 +224,6 @@ def discumsum_bwd_triton(
     dlog_G = torch.zeros(B, T, H, dtype=torch.float32, device=dY.device)
     
     grid = lambda args: (B, H, triton.cdiv(D, args["BLOCK_D"]))
-    logger.debug('Run discumsum backward')
     # Launch kernel
     discumsum_bwd_kernel[grid](
         dY, Y, log_G, dX, dlog_G,
@@ -235,7 +234,6 @@ def discumsum_bwd_triton(
         dX.stride(0), dX.stride(1), dX.stride(2), dX.stride(3),
         dlog_G.stride(0), dlog_G.stride(1), dlog_G.stride(2),
     )
-    logger.debug('Discumsum backward done')
     return dX, dlog_G
 
 
