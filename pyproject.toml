@@ -1,6 +1,6 @@
 [project]
 name = "power-attention"
-version = "1.1.0"
+version = "1.2.0"
 description = "Kernels for symmetric-power-based linear transformers"
 authors = [
   { name = "Sean Zhang", email = "sean@manifest.com" },
@@ -16,7 +16,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   'numpy>=2.2',
-  "torch==2.6.0",
+  "torch>=2.6.0",
   "triton>=3.2",
   'setuptools>=69.5.1',
   "einops",
