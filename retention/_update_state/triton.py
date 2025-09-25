@@ -55,7 +55,7 @@ def get_offsets_p2(off_D, d, block1, block_D):
     multiplier = 1 if (n + 1) * block2 > m * block1 else 2
     return m*block1, n*block2, multiplier
 
-@triton.autotune(list(filter(keep, fwd_configs)), key=["deg", "d", "e", "D"])
+@triton.autotune(list(filter(keep, fwd_configs)), key=["deg", "d", "e", "D"], cache_results=True)
 @triton.jit
 @kernelgen(list(filter(keep, fwd_configs)))
 def _update_state_fwd(K, V, S, N, deg: tl.constexpr, 
@@ -142,7 +142,7 @@ bwd_configs = [
     for V_IN_REGS in [True, False]
 ]
 
-@triton.autotune(list(filter(keep, bwd_configs)), key=["deg", "d", "e", "D"])
+@triton.autotune(list(filter(keep, bwd_configs)), key=["deg", "d", "e", "D"], cache_results=True)
 @triton.jit
 @kernelgen(list(filter(keep, bwd_configs)))
 def _update_state_bwd(K, V, dS, dN, dK, dV, deg: tl.constexpr,

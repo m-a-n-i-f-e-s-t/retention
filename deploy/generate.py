@@ -99,7 +99,7 @@ def _generate(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, args: argpa
         stats['tokens_per_second_std'] = math.sqrt(sum((x - stats['tokens_per_second_avg'])**2 for x in stats['tokens_per_second']) / len(stats['tokens_per_second']))
         stats['total_time'] = time.time() - start_time
         print(f"{BLUE}Stats:{RESET}")
-        print(f"Time to first token: {GREEN}{stats['time_to_first_token']:.2f}s{RESET}\nTokens per second: {GREEN}{stats['tokens_per_second_avg']:.2f}s ± {stats['tokens_per_second_std']:.2f}{RESET}\nTokens generated: {GREEN}{stats['tokens_generated']}{RESET}\nPrompt tokens: {GREEN}{inputs.input_ids.shape[1]}{RESET}\nTotal tokens: {GREEN}{inputs.input_ids.shape[1] + stats['tokens_generated']}{RESET}\nTotal time: {GREEN}{stats['total_time']:.2f}s{RESET}")
+        print(f"Time to first token: {GREEN}{stats['time_to_first_token']:.2f}s{RESET}\nTokens per second: {GREEN}{stats['tokens_per_second_avg']:.2f} ± {stats['tokens_per_second_std']:.2f}{RESET}\nTokens generated: {GREEN}{stats['tokens_generated']}{RESET}\nPrompt tokens: {GREEN}{inputs.input_ids.shape[1]}{RESET}\nTotal tokens: {GREEN}{inputs.input_ids.shape[1] + stats['tokens_generated']}{RESET}\nTotal time: {GREEN}{stats['total_time']:.2f}s{RESET}")
 
         if args.stats_only: # write stats to file
             # Build a JSON-safe record

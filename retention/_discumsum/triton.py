@@ -29,6 +29,7 @@ fwd_configs = [
     configs=fwd_configs,
     key=['D'],
     prune_configs_by={'early_config_prune': prune_configs_by_size},
+    cache_results=True,
 )
 @triton.jit
 def discumsum_fwd_kernel(
@@ -106,6 +107,7 @@ bwd_configs = [
     key=['D'],
     reset_to_zero=['dG_ptr'],
     prune_configs_by={'early_config_prune': prune_configs_by_size},
+    cache_results=True,
 )
 @triton.jit
 def discumsum_bwd_kernel(

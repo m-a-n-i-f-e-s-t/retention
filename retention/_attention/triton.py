@@ -110,7 +110,7 @@ def _attn_fwd_inner(acc, l_i, m_i, q, gq, p_k, p_gk, p_v, #
     return acc, l_i, m_i
 
 
-@triton.autotune(list(filter(keep, fwd_configs)), key=["DIM_QK", "DIM_VO", "r", "w", "gating", "deg", "norm"])
+@triton.autotune(list(filter(keep, fwd_configs)), key=["DIM_QK", "DIM_VO", "r", "w", "gating", "deg", "norm"], cache_results=True)
 @triton.jit
 def _attn_fwd(Q, K, V, LOG_GQ, LOG_GK, L, M, Out,  #
               stride_qb, stride_qh, stride_qm, stride_qd,  #
@@ -210,6 +210,12 @@ bwd_configs_dq = [
     for BLK_SLICE_FACTOR in [1]\
 ]
 
+def prune_bwd_dq_configs(configs, nargs, **kwargs):
+    pruned_configs = []
+    for config in configs:
+        if config.kwargs["BM2"] % kwargs["r"] == 0 and config.kwargs["BN2"] % kwargs["w"] == 0:
+            pruned_configs.append(config)
+    return pruned_configs
 
 def keep_bwd(conf):
     FACTOR = conf.kwargs["BLK_SLICE_FACTOR"]
@@ -224,7 +230,7 @@ preprocess_configs = [
     for BM in [64, 128, 256]
 ]
 
-@triton.autotune(preprocess_configs, key=["M_CTX", "HEAD_DIM"])
+@triton.autotune(preprocess_configs, key=["M_CTX", "HEAD_DIM"], cache_results=True)
 @triton.jit
 def _attn_bwd_preprocess(O, DO, Delta,  #
                          stride_ob, stride_oh, stride_om, stride_oe, #
@@ -387,7 +393,7 @@ def _attn_bwd_dq(dq, dgq, q, gq, do, m, dl_or_delta, #
     return dq, dgq
 
 
-@triton.autotune(list(filter(keep_bwd, bwd_configs_dkdv)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"])
+@triton.autotune(list(filter(keep_bwd, bwd_configs_dkdv)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"], cache_results=True)
 @triton.jit
 def attn_bwd_dkdv(Q, K, V, LOG_GQ, LOG_GK, M, Delta, DO, DL, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
               stride_qb, stride_qh, stride_qm, stride_qd, #
@@ -493,7 +499,7 @@ def attn_bwd_dkdv(Q, K, V, LOG_GQ, LOG_GK, M, Delta, DO, DL, DQ, DK, DV, DLOG_GQ
         tl.store(p_dgk, dgk, mask=mask_dkv)
 
 
-@triton.autotune(list(filter(keep_bwd, bwd_configs_dq)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"])
+@triton.autotune(list(filter(keep_bwd, bwd_configs_dq)), key=["M_CTX", "N_CTX", "DIM_QK", "DIM_VO", "r", "w", "gating", "deg"], cache_results=True)
 @triton.jit
 def attn_bwd_dq(Q, K, V, LOG_GQ, LOG_GK, M, Delta, DO, DL, DQ, DK, DV, DLOG_GQ, DLOG_GK, #
               stride_qb, stride_qh, stride_qm, stride_qd, #

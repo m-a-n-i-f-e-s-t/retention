@@ -685,7 +685,7 @@ class Cache:
         sequence length.
         """
         if layer_idx < len(self.layers):
-            return self.layers[layer_idx].keys, self.layers[layer_idx].values, self.layers[layer_idx].gatings
+            return self.layers[layer_idx].keys, self.layers[layer_idx].values, self.layers[layer_idx].gatings, self.layers[layer_idx].state, self.layers[layer_idx].sum_of_keys
         else:
             raise KeyError(
                 f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"

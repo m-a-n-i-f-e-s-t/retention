@@ -48,7 +48,7 @@ def get_offsets_p2(off_D, d, block1, block_D):
     return m*block1, n*block2
 
 
-@triton.autotune(fwd_configs, key=["deg", "d", "e"], prune_configs_by={'early_config_prune': prune_configs})
+@triton.autotune(fwd_configs, key=["deg", "d", "e"], prune_configs_by={'early_config_prune': prune_configs}, cache_results=True)
 @triton.jit
 @kernelgen(fwd_configs)
 def _query_state_fwd(Q, S, SK, Y_attn, L_attn, M, O, L,
@@ -178,7 +178,7 @@ dQ_bwd_configs = [
     for ns in [1, 3]
 ]
 
-@triton.autotune(dQ_bwd_configs, key=["deg", "d", "e"], prune_configs_by={'early_config_prune': prune_configs})
+@triton.autotune(dQ_bwd_configs, key=["deg", "d", "e"], prune_configs_by={'early_config_prune': prune_configs}, cache_results=True)
 @triton.jit
 @kernelgen(dQ_bwd_configs)
 def _query_state_bwd_dQ(Q, S, SK, dO, Delta, M, L, dQ, dY_attn, dL_attn,
@@ -334,7 +334,7 @@ dS_bwd_configs = [
     for ns in [1, 3]
 ]
 
-@triton.autotune(dS_bwd_configs, key=["deg", "d", "e"], prune_configs_by={'early_config_prune': prune_configs})
+@triton.autotune(dS_bwd_configs, key=["deg", "d", "e"], prune_configs_by={'early_config_prune': prune_configs}, cache_results=True)
 @triton.jit
 @kernelgen(dS_bwd_configs)
 def _query_state_bwd_dS(Q, L, M, dO, Delta, dS, dSK,
@@ -453,7 +453,7 @@ preprocess_configs = [
     for BM in [64, 128, 256]
 ]
 
-@triton.autotune(preprocess_configs, key=["HEAD_DIM"])
+@triton.autotune(preprocess_configs, key=["HEAD_DIM"], cache_results=True)
 @triton.jit
 def _query_state_bwd_preprocess(O, DO, Delta,  #
                          stride_ob, stride_om, stride_oh, stride_oe, #
